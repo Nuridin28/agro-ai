@@ -41,13 +41,20 @@ export interface GiprozemResponse {
   fetchedAt: string;
 }
 
-export async function queryGiprozem(params: Record<string, string>, layerId: number = GIPROZEM_LAYER): Promise<GiprozemResponse> {
+export async function queryGiprozem(
+  params: Record<string, string>,
+  layerId: number = GIPROZEM_LAYER,
+  opts: { timeoutMs?: number } = {},
+): Promise<GiprozemResponse> {
   const url = new URL(`${GIPROZEM_BASE}/${layerId}/query`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
 
+  // Дефолт 25с (было 15с) — Гипрозем ArcGIS на нагруженных слоях с
+  // returnGeometry=true иногда отвечает 18-22с. На сервере стабильно даём
+  // больше, но клиенту в UI стоит подсветить долгое ожидание.
+  const timeoutMs = opts.timeoutMs ?? 25000;
   const res = await fetch(url, {
-    // На случай длинных ответов
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(timeoutMs),
     headers: { Accept: "application/json" },
     cache: "no-store",
   });

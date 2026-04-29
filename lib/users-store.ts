@@ -17,6 +17,10 @@ export interface UserField {
   parcels: number;
   // Кэш атрибутов первого участка (для быстрого отображения)
   sample: GiprozemFeature["attributes"];
+  // Полигон первого участка хозяйства в формате [lon, lat][] (EPSG:4326).
+  // Опционально (для старых записей до фичи может не быть). Используется
+  // спутниковым модулем для NDVI-проверки.
+  polygon4326?: number[][];
 }
 
 export interface User {

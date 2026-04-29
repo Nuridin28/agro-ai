@@ -16,6 +16,13 @@ import { SatelliteSection } from "@/components/SatelliteSection";
 import { SatelliteCardSkeleton } from "@/components/SatelliteCardSkeleton";
 import { buildFarmerApplications, type SubsidyApplication } from "@/lib/subsidies";
 import { getStoredApplicationsFor } from "@/lib/applications-store";
+import { findById as findUserById, type User } from "@/lib/users-store";
+import { OBLAST_NAMES, findLayer } from "@/lib/giprozem-catalog";
+import { RealMeteoCard } from "@/components/RealMeteoCard";
+import { RealMeteoSkeleton } from "@/components/RealMeteoSkeleton";
+import { checkUserApplication, sortBySeverity, declarationToText, type CheckSeverity } from "@/lib/applications-check";
+import { fetchSeason } from "@/lib/real-meteo";
+import type { FieldPolygon } from "@/lib/satellite/types";
 
 export function generateStaticParams() {
   return FARMERS.map((f) => ({ id: f.id }));
@@ -23,6 +30,15 @@ export function generateStaticParams() {
 
 export default async function FarmerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  // Реальный пользователь: id вида "U-xxxxxxxx". У него нет мок-полей/сезонов/
+  // verdict, зато есть привязки Гипрозема и поданные через форму заявки.
+  if (id.startsWith("U-")) {
+    const user = await findUserById(id.slice(2));
+    if (!user) notFound();
+    return <RealUserPage user={user} farmerId={id} />;
+  }
+
   const farmer = findFarmer(id);
   if (!farmer) notFound();
 
@@ -287,6 +303,228 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Досье реального пользователя (зарегистрированного через /register).
+// Использует данные привязки Гипрозема:
+//  - агрохимию (n/p/k/gum) для проверок заявок
+//  - polygon4326 (если сохранён при регистрации) для NDVI-мониторинга
+//  - centroid слоя Гипрозема для реального метео через Open-Meteo
+// ────────────────────────────────────────────────────────────────────────────
+async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }) {
+  const stored = await getStoredApplicationsFor(farmerId);
+  const totalRequested = stored.reduce((s, a) => s + a.amount, 0);
+  const firstField = user.fields[0];
+  const oblast = firstField ? OBLAST_NAMES[firstField.oblastCode] ?? "—" : "—";
+  const layer = firstField ? findLayer(firstField.layerId) : null;
+  const seasonYear = new Date().getUTCFullYear();
+
+  // Подгружаем сезонное метео ОДИН раз — используется и в карточке метео,
+  // и в проверке заявок (фиктивный посев / дефицит влаги).
+  const seasonMeteo = layer
+    ? await fetchSeason(layer.centroid[0], layer.centroid[1], seasonYear).catch(() => null)
+    : null;
+
+  // Полигон поля для спутниковой проверки. Если фермер регистрировался до
+  // включения фичи — у него нет polygon4326, тогда блок не рендерим.
+  const polygon: FieldPolygon | null = firstField?.polygon4326 && firstField.polygon4326.length >= 4
+    ? (firstField.polygon4326 as FieldPolygon)
+    : null;
+  // Baseline для inactivity-проверки: если есть пользовательская заявка с
+  // декларацией — берём её sowing_date, иначе середина мая текущего года.
+  const baselineDate = stored.find((a) => a.cropDeclaration?.declaredSowingDate)?.cropDeclaration?.declaredSowingDate
+    ?? `${seasonYear}-05-15`;
+
+  return (
+    <div className="space-y-6">
+      <nav className="text-xs text-foreground/60">
+        <Link className="hover:underline" href="/inspector">Дашборд</Link> / <span>{user.farmName}</span>
+      </nav>
+
+      <Card className="p-6">
+        <div className="flex flex-wrap items-start gap-4 justify-between">
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{user.farmName}</h1>
+              <span className="text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-sky-100 text-sky-900 border-sky-300">
+                САМОРЕГИСТРАЦИЯ
+              </span>
+            </div>
+            <div className="text-sm text-foreground/70 mt-1">
+              {user.ownerFio ?? user.email}
+              {user.bin && user.bin !== "—" && <> · БИН/ИИН <span className="font-mono">{user.bin}</span></>}
+            </div>
+            <div className="text-sm text-foreground/70 mt-0.5">
+              {oblast}{layer ? `, ${layer.name}` : ""} · зарегистрирован{user.createdAt ? ` ${user.createdAt.slice(0, 10)}` : ""}
+            </div>
+            <div className="text-xs text-foreground/55 mt-1.5 font-mono">{farmerId}</div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 min-w-64">
+            <Mini label="Привязок Гипрозема" value={user.fields.length} />
+            <Mini label="Подано на сумму" value={formatTenge(totalRequested)} />
+          </div>
+        </div>
+      </Card>
+
+      {stored.length > 0 && (
+        <Card>
+          <CardHeader
+            title={`Заявки на субсидии · ${stored.length}`}
+            subtitle="Поданы через кабинет фермера. Каждая заявка с декларацией урожая прогоняется через автоматический фрод-чек."
+          />
+          <div className="space-y-3 p-4">
+            {stored.map((a) => {
+              const decl = a.cropDeclaration;
+              const warnings = decl
+                ? sortBySeverity(checkUserApplication(a, firstField, seasonMeteo ?? undefined))
+                : [];
+              const sevWeight: Record<CheckSeverity, number> = { critical: 4, high: 3, warn: 2, info: 1, ok: 0 };
+              const topSev = warnings.reduce<CheckSeverity>(
+                (acc, w) => (sevWeight[w.severity] > sevWeight[acc] ? w.severity : acc),
+                "ok",
+              );
+              const borderCls =
+                topSev === "critical" ? "border-rose-300 bg-rose-50/50" :
+                topSev === "high"     ? "border-orange-300 bg-orange-50/50" :
+                topSev === "warn"     ? "border-amber-300 bg-amber-50/50" :
+                                        "border-border bg-card";
+              return (
+                <div key={a.id} className={`border rounded-xl p-4 ${borderCls}`}>
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <CategoryBadge category={a.category} />
+                        <span className="font-mono text-xs text-foreground/70">{a.id}</span>
+                        <span className="text-[11px] font-medium border border-amber-300 bg-amber-100 text-amber-900 rounded px-2 py-0.5">{a.status}</span>
+                      </div>
+                      <div className="text-sm text-foreground/85 mt-1.5">{a.scope}</div>
+                      {decl && (
+                        <div className="text-[11px] text-foreground/60 mt-1 font-mono">{declarationToText(decl)}</div>
+                      )}
+                      <div className="text-[11px] text-foreground/55 mt-0.5">подана {a.date}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-base font-semibold tabular-nums">{formatTenge(a.amount)}</div>
+                      <div className="text-[11px] text-foreground/55">сумма заявки</div>
+                    </div>
+                  </div>
+                  {decl ? (
+                    warnings.length > 0 ? (
+                      <div className="mt-3 border-t border-border-soft pt-3 space-y-2">
+                        <div className="text-[10px] uppercase tracking-wider text-foreground/60">Авто-проверка · сработало правил: {warnings.length}</div>
+                        {warnings.map((w, i) => <WarningRow key={i} warning={w} />)}
+                      </div>
+                    ) : (
+                      <div className="mt-3 border-t border-border-soft pt-3 text-xs text-emerald-800">
+                        ✓ Авто-проверка: декларация согласована с агрохимией{seasonMeteo ? " и метео" : ""} — заявку можно одобрять.
+                      </div>
+                    )
+                  ) : (
+                    <div className="mt-3 border-t border-border-soft pt-3 text-[11px] text-foreground/55 italic">
+                      Декларация урожая не предоставлена — авто-проверка по этой заявке недоступна.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {layer && (
+        <Suspense fallback={<RealMeteoSkeleton />}>
+          <RealMeteoCard
+            lat={layer.centroid[0]}
+            lng={layer.centroid[1]}
+            year={seasonYear}
+            label={`центр района ${layer.name}`}
+          />
+        </Suspense>
+      )}
+
+      {polygon ? (
+        <Suspense fallback={<SatelliteCardSkeleton />}>
+          <SatelliteSection polygon={polygon} baselineDate={baselineDate} year={seasonYear} />
+        </Suspense>
+      ) : (
+        <Card className="p-5 bg-amber-50/50 border-amber-200">
+          <div className="text-sm font-semibold text-amber-900">Спутниковая проверка не включена</div>
+          <div className="text-xs text-amber-900/80 mt-1">
+            Полигон поля не сохранился при регистрации (возможно, регистрация была раньше включения фичи).
+            Перерегистрируйтесь, чтобы прикрепить контур поля для NDVI-мониторинга.
+          </div>
+        </Card>
+      )}
+
+      {user.fields.length > 0 ? (
+        <Card>
+          <CardHeader title={`Привязки Гипрозема · ${user.fields.length}`} subtitle="Хозяйства и участки, прикреплённые при регистрации." />
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase tracking-wider text-foreground/60 bg-muted/60 text-left">
+                <tr>
+                  <th className="px-5 py-2 font-medium">Название хозяйства</th>
+                  <th className="px-3 py-2 font-medium">Слой Гипрозема</th>
+                  <th className="px-3 py-2 font-medium text-right">Участков</th>
+                  <th className="px-3 py-2 font-medium text-right">Гумус %</th>
+                  <th className="px-3 py-2 font-medium text-right">P мг/кг</th>
+                  <th className="px-3 py-2 font-medium text-right">N мг/кг</th>
+                  <th className="px-3 py-2 font-medium text-right">K мг/кг</th>
+                </tr>
+              </thead>
+              <tbody>
+                {user.fields.map((f, i) => (
+                  <tr key={i} className="border-t border-border align-top">
+                    <td className="px-5 py-3 font-medium">{f.nazvxoz}</td>
+                    <td className="px-3 py-3 font-mono text-xs">{f.layerName}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{f.parcels}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.gum ?? "—"}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.p ?? "—"}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.n ?? "—"}</td>
+                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.k ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-6 bg-amber-50/60 border-amber-200">
+          <div className="font-semibold text-amber-900">Нет привязанных хозяйств Гипрозема</div>
+          <div className="text-sm text-amber-900/80 mt-1">
+            Полная фрод-проверка (агрохимия + спутник + метео) станет доступна, когда фермер привяжет участок при регистрации.
+          </div>
+        </Card>
+      )}
+
+    </div>
+  );
+}
+
+function WarningRow({ warning }: { warning: import("@/lib/applications-check").CheckWarning }) {
+  const cls: Record<CheckSeverity, string> = {
+    critical: "bg-rose-100 text-rose-900 border-rose-300",
+    high:     "bg-orange-100 text-orange-900 border-orange-300",
+    warn:     "bg-amber-100 text-amber-900 border-amber-300",
+    info:     "bg-sky-100 text-sky-900 border-sky-300",
+    ok:       "bg-emerald-100 text-emerald-900 border-emerald-300",
+  };
+  const label: Record<CheckSeverity, string> = {
+    critical: "критично", high: "высокий риск", warn: "внимание", info: "инфо", ok: "норма",
+  };
+  return (
+    <div className="flex items-start gap-3 text-xs">
+      <span className={`shrink-0 mt-0.5 inline-flex items-center text-[10px] font-medium border rounded-full px-2 py-0.5 ${cls[warning.severity]}`}>
+        {label[warning.severity]}
+      </span>
+      <div className="flex-1">
+        <div className="font-medium text-foreground/90">{warning.title}</div>
+        <div className="text-foreground/70 mt-0.5">{warning.detail}</div>
+        <div className="text-[10px] text-foreground/50 font-mono mt-0.5">{warning.code}</div>
+      </div>
     </div>
   );
 }

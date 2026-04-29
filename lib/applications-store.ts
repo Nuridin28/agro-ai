@@ -5,17 +5,32 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { SubsidyCategory, ApplicationStatus } from "./subsidy-categories";
+import type { Crop } from "./types";
+
+// Опциональные поля, которые задаёт фермер для категорий fertilizer/seeds.
+// Они нужны, чтобы фрод-движок мог реально проверить заявку на разумность
+// (заявленный урожай vs. бонитет/агрохимия/метео).
+export interface CropDeclaration {
+  crop: Crop;
+  areaHa: number;
+  declaredYieldCha: number;     // заявленная урожайность, ц/га
+  fertilizerKgHa: number;        // факт. закуп удобрений на га
+  declaredSowingDate: string;   // YYYY-MM-DD
+}
 
 export interface StoredApplication {
   id: string;
   farmerId: string;
   category: SubsidyCategory;
   type: string;
-  scope: string;       // описание объекта/назначения
-  amount: number;      // тенге
+  scope: string;
+  amount: number;
   status: ApplicationStatus;
-  date: string;        // ISO дата подачи (YYYY-MM-DD)
-  submittedAt: string; // ISO timestamp
+  date: string;
+  submittedAt: string;
+  // Опционально для категорий с зерновыми/семенами — добавляется через
+  // расширенную форму. Без этих полей фрод-движок не запускается.
+  cropDeclaration?: CropDeclaration;
 }
 
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -58,6 +73,7 @@ export interface NewApplicationInput {
   type: string;
   scope: string;
   amount: number;
+  cropDeclaration?: CropDeclaration;
 }
 
 export async function addApplication(input: NewApplicationInput): Promise<StoredApplication> {
@@ -73,6 +89,7 @@ export async function addApplication(input: NewApplicationInput): Promise<Stored
     status: "На проверке",
     date: now.toISOString().slice(0, 10),
     submittedAt: now.toISOString(),
+    cropDeclaration: input.cropDeclaration,
   };
   all.push(app);
   await writeAll(all);

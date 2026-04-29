@@ -112,24 +112,44 @@ export default function GiprozemPage() {
     setLoading(true); setError(null);
 
     const yearParam = year ? `&year=${year}` : "";
-    Promise.all(
-      layers.map((l) =>
-        fetch(`/api/giprozem?layer=${l.id}&bbox=${w},${s},${e},${n}&limit=300${yearParam}`, { signal: ctrl.signal })
-          .then((r) => r.ok ? r.json() as Promise<GiprozemResponse> : Promise.reject(new Error(`HTTP ${r.status}`)))
-          .then((d) => ({ layer: l, features: d.features ?? [] }))
-      )
+    // Promise.allSettled, чтобы один таймаутящий слой не валил всю карту:
+    // показываем то, что успели получить, и предупреждаем о пропущенных.
+    Promise.allSettled(
+      layers.map(async (l) => {
+        const r = await fetch(
+          `/api/giprozem?layer=${l.id}&bbox=${w},${s},${e},${n}&limit=300${yearParam}`,
+          { signal: ctrl.signal },
+        );
+        const d = await r.json().catch(() => ({} as Partial<GiprozemResponse>));
+        if (!r.ok && !(d as { features?: unknown }).features) {
+          throw new Error(`Слой ${l.name}: ${(d as { error?: string }).error ?? `HTTP ${r.status}`}`);
+        }
+        return { layer: l, features: (d as GiprozemResponse).features ?? [] };
+      }),
     )
       .then((results) => {
         if (ctrl.signal.aborted) return;
-        const merged: EnrichedFeature[] = results.flatMap((r) =>
+        const ok = results.flatMap((res) =>
+          res.status === "fulfilled" ? [res.value] : [],
+        );
+        const failed = results.flatMap((res) =>
+          res.status === "rejected" && !(res.reason as Error)?.message?.includes("aborted")
+            ? [(res.reason as Error).message]
+            : [],
+        );
+        const merged: EnrichedFeature[] = ok.flatMap((r) =>
           r.features.map((f) => ({ ...f, _layerId: r.layer.id, _layerName: r.layer.name }))
         );
         setFeatures(merged);
         const yearTag = year ? ` • год ${year}` : "";
-        setLastQueryDescr(`bbox=${w.toFixed(3)},${s.toFixed(3)},${e.toFixed(3)},${n.toFixed(3)} • слоёв: ${layers.length} • участков: ${merged.length}${yearTag}`);
+        const failedTag = failed.length > 0 ? ` • не загрузилось: ${failed.length}` : "";
+        setLastQueryDescr(`bbox=${w.toFixed(3)},${s.toFixed(3)},${e.toFixed(3)},${n.toFixed(3)} • слоёв: ${ok.length}/${layers.length} • участков: ${merged.length}${yearTag}${failedTag}`);
+        setError(failed.length > 0 && ok.length === 0
+          ? `Все слои в видимой области не ответили вовремя. Попробуйте уменьшить область просмотра или повторить позже.`
+          : null);
       })
       .catch((err) => {
-        if ((err as any).name === "AbortError") return;
+        if ((err as Error).name === "AbortError") return;
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {

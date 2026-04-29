@@ -12,6 +12,9 @@ interface Match {
   oblastName: string;
   parcels: number;
   sample: { p?: number; gum?: number; yearob?: number; s?: number };
+  // Полигон первого участка хозяйства в формате [lon, lat][] (EPSG:4326),
+  // используется спутниковой проверкой NDVI после регистрации.
+  polygon4326?: number[][] | null;
 }
 
 type Step = "credentials" | "lookup" | "select" | "confirm";
@@ -190,6 +193,7 @@ export default function RegisterPage() {
           oblastCode: m.oblastCode,
           parcels: m.parcels,
           sample: m.sample,
+          polygon4326: m.polygon4326 ?? undefined,
         }));
       const res = await fetch("/api/auth/register", {
         method: "POST",

@@ -1,24 +1,49 @@
 [
   {
-    "id": "APP-USER-TESTSEED",
-    "farmerId": "F-001",
+    "id": "APP-USER-WITHDECL",
+    "farmerId": "U-739c3094fc4b445b55",
     "category": "fertilizer",
     "type": "Субсидия — Удобрения",
-    "scope": "Демо: подана через ApplicationForm — пшеница, 800 га, 50 кг/га",
-    "amount": 1500000,
+    "scope": "Пшеница яровая · поле №1 · 200 га",
+    "amount": 800000,
     "status": "На проверке",
     "date": "2026-04-29",
-    "submittedAt": "2026-04-29T10:00:00Z"
+    "submittedAt": "2026-04-29T12:00:00Z",
+    "cropDeclaration": {
+      "crop": "wheat_spring",
+      "areaHa": 200,
+      "declaredYieldCha": 24.0,
+      "fertilizerKgHa": 30,
+      "declaredSowingDate": "2024-04-15"
+    }
   },
   {
-    "id": "APP-USER-E9B8032A",
-    "farmerId": "F-001",
+    "id": "APP-USER-NORMAL",
+    "farmerId": "U-739c3094fc4b445b55",
     "category": "fertilizer",
     "type": "Субсидия — Удобрения",
-    "scope": "Пшеница",
-    "amount": 12001,
+    "scope": "Пшеница яровая · поле №2 · 100 га",
+    "amount": 350000,
     "status": "На проверке",
     "date": "2026-04-29",
-    "submittedAt": "2026-04-29T10:27:26.379Z"
+    "submittedAt": "2026-04-29T12:30:00Z",
+    "cropDeclaration": {
+      "crop": "wheat_spring",
+      "areaHa": 100,
+      "declaredYieldCha": 12.0,
+      "fertilizerKgHa": 45,
+      "declaredSowingDate": "2024-05-15"
+    }
+  },
+  {
+    "id": "APP-USER-NODECL",
+    "farmerId": "U-739c3094fc4b445b55",
+    "category": "transport",
+    "type": "Субсидия — Транспорт",
+    "scope": "Доставка зерна на элеватор",
+    "amount": 200000,
+    "status": "На проверке",
+    "date": "2026-04-29",
+    "submittedAt": "2026-04-29T12:45:00Z"
   }
 ]

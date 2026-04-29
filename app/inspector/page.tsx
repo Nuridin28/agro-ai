@@ -148,11 +148,7 @@ export default async function DashboardPage() {
                   <tr key={app.id} className="border-t border-border align-top hover:bg-muted-2/50 transition">
                     <td className="px-5 py-3 font-mono text-xs">{app.id}</td>
                     <td className="px-3 py-3">
-                      {findFarmer(app.farmerId) ? (
-                        <FarmerLink id={app.farmerId}>{farmerName}</FarmerLink>
-                      ) : (
-                        <span className="text-foreground/85">{farmerName}</span>
-                      )}
+                      <FarmerLink id={app.farmerId}>{farmerName}</FarmerLink>
                       <div className="text-[11px] text-foreground/60 mt-0.5 font-mono">{app.farmerId}</div>
                     </td>
                     <td className="px-3 py-3"><CategoryBadge category={app.category} /></td>

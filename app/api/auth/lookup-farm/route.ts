@@ -18,6 +18,10 @@ interface MatchAgg {
   oblastName: string;
   parcels: number;
   sample: any;
+  // Полигон первого участка хозяйства в формате [lon, lat][] (EPSG:4326).
+  // Buildnamequery просили withGeometry=true и outSR=4326. Используется
+  // для спутниковой NDVI-проверки в досье real-юзера.
+  polygon4326?: number[][] | null;
 }
 
 const CONCURRENCY = 12;
@@ -37,7 +41,10 @@ export async function GET(req: NextRequest) {
   if (!q || q.trim().length < 3) {
     return Response.json({ error: "минимум 3 символа в названии" }, { status: 400 });
   }
-  const params = buildNameQuery(q.trim(), 30, false);
+  // withGeometry=true → ArcGIS вернёт polygon ring каждого feature в EPSG:4326.
+  // Это нужно, чтобы при регистрации мы могли сохранить полигон поля
+  // и в дальнейшем гонять его через Sentinel Hub для NDVI-проверки.
+  const params = buildNameQuery(q.trim(), 30, true);
 
   const matches = new Map<string, MatchAgg>();
 
@@ -48,6 +55,7 @@ export async function GET(req: NextRequest) {
         const name = f.attributes.nazvxoz;
         if (!name) continue;
         const key = `${name}::${layer.id}`;
+        const ring = pickOuterRing(f.geometry);
         if (!matches.has(key)) {
           matches.set(key, {
             nazvxoz: name,
@@ -57,6 +65,7 @@ export async function GET(req: NextRequest) {
             oblastName: OBLAST_NAMES[layer.oblastCode] ?? layer.oblastCode,
             parcels: 1,
             sample: f.attributes,
+            polygon4326: ring,
           });
         } else {
           matches.get(key)!.parcels++;
@@ -71,4 +80,23 @@ export async function GET(req: NextRequest) {
     matches: list,
     totalLayersScanned: GIPROZEM_LAYERS.length,
   });
+}
+
+// ArcGIS polygon: { rings: number[][][] } — массив колец, [0] это outer.
+// Каждая точка [x, y] = [lon, lat] (т.к. outSR=4326).
+// Для Sentinel Hub нам нужен один outer ring без дырок.
+function pickOuterRing(geom: { rings?: number[][][] } | undefined): number[][] | null {
+  if (!geom?.rings || geom.rings.length === 0) return null;
+  const ring = geom.rings[0];
+  if (!Array.isArray(ring) || ring.length < 4) return null;
+  // Прорежаем плотные кольца — Гипрозем иногда отдаёт сотни точек на участок,
+  // SH достаточно ~30 для полигона. Берём каждую N-ю точку, всегда сохраняя
+  // первую и замыкающую.
+  const max = 64;
+  if (ring.length <= max) return ring;
+  const step = Math.ceil(ring.length / max);
+  const out: number[][] = [];
+  for (let i = 0; i < ring.length - 1; i += step) out.push(ring[i]);
+  out.push(ring[ring.length - 1]);
+  return out;
 }

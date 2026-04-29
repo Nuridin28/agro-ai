@@ -84,6 +84,17 @@ export async function GET(req: NextRequest) {
       headers: { "Cache-Control": "public, max-age=300, s-maxage=86400" },
     });
   } catch (e) {
-    return Response.json({ error: String(e) }, { status: 502 });
+    // Таймаут на стороне Гипрозема — частая ситуация при большой выборке
+    // (район с тысячами участков + returnGeometry=true). Отдаём 504 с пустым
+    // features, чтобы клиент мог отрисовать остальные слои и показать toast.
+    const isTimeout = (e as Error)?.name === "TimeoutError";
+    const status = isTimeout ? 504 : 502;
+    return Response.json({
+      error: String(e),
+      timeout: isTimeout,
+      layer: layerName,
+      layerId,
+      features: [],
+    }, { status });
   }
 }
