@@ -36,7 +36,7 @@ function RolePill({ role }: { role: "inspector" | "farmer" }) {
     role === "inspector"
       ? "bg-rose-50 text-rose-700 border-rose-200"
       : "bg-emerald-50 text-emerald-700 border-emerald-200";
-  const label = role === "inspector" ? "Инспектор ДЭР" : "Кабинет фермера";
+  const label = role === "inspector" ? "Инспектор" : "Фермер";
   return (
     <span className={`hidden md:inline-flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full border ${cls}`}>
       <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -62,28 +62,28 @@ function NavInner() {
       {role === "inspector" && (
         <>
           <nav className="flex items-center gap-0.5">
-            <NavLink href="/inspector" label="Дашборд" icon={<IconChart size={14} />} active={path === "/inspector"} />
-            <NavLink href="/inspector/crops" label="Земледелие" icon={<IconSprout size={14} />} active={path.startsWith("/inspector/crops")} />
-            <NavLink href="/inspector/livestock" label="Животноводство" icon={<IconShield size={14} />} active={path.startsWith("/inspector/livestock")} />
-            <NavLink href="/giprozem" label="Гипрозем" icon={<IconMap size={14} />} active={path.startsWith("/giprozem")} />
-            <NavLink href="/inspector/bns" label="БНС" icon={<IconLayers size={14} />} active={path.startsWith("/inspector/bns")} />
-            <NavLink href="/inspector/sources" label="Источники" icon={<IconLink size={14} />} active={path.startsWith("/inspector/sources")} />
+            <NavLink href="/inspector" label="Главная" icon={<IconChart size={14} />} active={path === "/inspector"} />
+            <NavLink href="/inspector/crops" label="Поля и урожай" icon={<IconSprout size={14} />} active={path.startsWith("/inspector/crops")} />
+            <NavLink href="/inspector/livestock" label="Скот" icon={<IconShield size={14} />} active={path.startsWith("/inspector/livestock")} />
+            <NavLink href="/giprozem" label="Карта" icon={<IconMap size={14} />} active={path.startsWith("/giprozem")} />
+            <NavLink href="/inspector/bns" label="Статистика" icon={<IconLayers size={14} />} active={path.startsWith("/inspector/bns")} />
+            <NavLink href="/inspector/sources" label="Откуда данные" icon={<IconLink size={14} />} active={path.startsWith("/inspector/sources")} />
           </nav>
           <RolePill role="inspector" />
-          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить ↗</Link>
+          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить роль ↗</Link>
         </>
       )}
       {role === "farmer" && (
         <>
           <nav className="flex items-center gap-0.5">
-            <NavLink href={`/farmer${asQuery}`} label="Кабинет" icon={<IconChart size={14} />} active={path === "/farmer"} />
-            <NavLink href={`/farmer/passport${asQuery}`} label="Паспорт" icon={<IconLayers size={14} />} active={path.startsWith("/farmer/passport")} />
+            <NavLink href={`/farmer${asQuery}`} label="Главная" icon={<IconChart size={14} />} active={path === "/farmer"} />
+            <NavLink href={`/farmer/passport${asQuery}`} label="Мои поля" icon={<IconLayers size={14} />} active={path.startsWith("/farmer/passport")} />
             <NavLink href={`/farmer/calculator${asQuery}`} label="Калькулятор" icon={<IconCalculator size={14} />} active={path.startsWith("/farmer/calculator")} />
-            <NavLink href={`/farmer/meteo${asQuery}`} label="Метео" icon={<IconCloud size={14} />} active={path.startsWith("/farmer/meteo")} />
+            <NavLink href={`/farmer/meteo${asQuery}`} label="Погода" icon={<IconCloud size={14} />} active={path.startsWith("/farmer/meteo")} />
             <NavLink href={`/farmer/applications${asQuery}`} label="Заявки" icon={<IconFile size={14} />} active={path.startsWith("/farmer/applications")} />
           </nav>
           <RolePill role="farmer" />
-          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить ↗</Link>
+          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить роль ↗</Link>
         </>
       )}
       {role === "neutral" && (
@@ -92,13 +92,13 @@ function NavInner() {
             href="/inspector"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border-soft bg-card hover:border-rose-300 hover:text-rose-700 transition text-[13px]"
           >
-            <IconShield size={14} /> Инспектор
+            <IconShield size={14} /> Я инспектор
           </Link>
           <Link
             href="/farmer"
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full gradient-accent text-accent-fg shadow-soft hover:shadow-pop transition text-[13px] font-medium"
           >
-            <IconSprout size={14} /> Войти как фермер
+            <IconSprout size={14} /> Я фермер
           </Link>
         </nav>
       )}

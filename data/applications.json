@@ -9,5 +9,16 @@
     "status": "На проверке",
     "date": "2026-04-29",
     "submittedAt": "2026-04-29T10:00:00Z"
+  },
+  {
+    "id": "APP-USER-E9B8032A",
+    "farmerId": "F-001",
+    "category": "fertilizer",
+    "type": "Субсидия — Удобрения",
+    "scope": "Пшеница",
+    "amount": 12001,
+    "status": "На проверке",
+    "date": "2026-04-29",
+    "submittedAt": "2026-04-29T10:27:26.379Z"
   }
 ]

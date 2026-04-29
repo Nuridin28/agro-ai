@@ -4,9 +4,9 @@ import Link from "next/link";
 import { HeaderNav } from "@/components/HeaderNav";
 
 export const metadata: Metadata = {
-  title: "AgroForensics KZ — AI-верификация субсидий АПК",
+  title: "AgroForensics KZ — помощь фермерам и инспекторам по субсидиям",
   description:
-    "AI-платформа сопоставления данных ИСЖ, Plem.kz, Гипрозема, ЕГКН, Qoldau, Казгидромета и Agrodata для проверки целевого использования субсидий в земледелии и животноводстве Казахстана.",
+    "Сводим данные госбаз про скот, поля, погоду и заявки в одном месте. Фермер получает подсказки и подаёт документы онлайн, инспектор видит подозрительные выплаты с понятным разбором.",
 };
 
 const SOURCE_LINKS = [
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <span className="w-8 h-8 rounded-xl gradient-accent text-accent-fg grid place-items-center font-bold text-sm shadow-soft group-hover:shadow-pop transition">A</span>
               <span className="flex flex-col leading-none">
                 <span className="font-semibold tracking-tight text-[15px]">AgroForensics KZ</span>
-                <span className="text-[10.5px] text-foreground-soft hidden sm:inline mt-0.5">AI-верификация субсидий АПК</span>
+                <span className="text-[10.5px] text-foreground-soft hidden sm:inline mt-0.5">Помощь фермерам и инспекторам по субсидиям</span>
               </span>
             </Link>
             <HeaderNav />
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <footer className="border-t border-border-soft mt-12 bg-background-elev/60">
           <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="text-xs text-foreground-soft">
-              <span className="font-medium text-foreground">Прототип</span> · демо-данные имитируют выгрузки из госисточников
+              <span className="font-medium text-foreground">Демо-версия</span> · данные взяты как будто из этих госбаз
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {SOURCE_LINKS.map((s) => (

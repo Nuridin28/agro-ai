@@ -27,10 +27,10 @@ export function AiInsight({ farmerId, mode, coords, year, buttonLabel, descripti
   const isPortfolio = mode === "inspector_portfolio";
   const isMeteo = mode === "meteo_advisor";
   const headerLabel =
-    isFarmer ? "AI-помощник (OpenAI)" :
-    isPortfolio ? "AI-инсайты по портфелю (OpenAI)" :
-    isMeteo ? "AI-агроклиматолог (OpenAI)" :
-    "AI-расследование (OpenAI)";
+    isFarmer ? "Помощник ИИ" :
+    isPortfolio ? "Разбор от ИИ" :
+    isMeteo ? "Совет ИИ по погоде" :
+    "Разбор от ИИ";
 
   async function run() {
     setLoading(true); setError(null); setHint(null); setText("");
@@ -55,16 +55,19 @@ export function AiInsight({ farmerId, mode, coords, year, buttonLabel, descripti
   }
 
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className="bg-card border border-border-soft rounded-2xl p-5 shadow-soft">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <div>
-          <div className="text-sm font-semibold flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-violet-500" />
-            {headerLabel}
+        <div className="flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 grid place-items-center">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
+            </svg>
+          </span>
+          <div>
+            <div className="text-sm font-semibold tracking-tight">{headerLabel}</div>
+            {description && <div className="text-xs text-foreground-soft mt-0.5">{description}</div>}
           </div>
-          {description && <div className="text-xs text-foreground/60 mt-0.5">{description}</div>}
         </div>
-        <span className="text-[11px] uppercase tracking-wider text-foreground/50 font-mono">gpt-4o-mini</span>
       </div>
 
       {(isFarmer || isMeteo) && (
@@ -73,9 +76,9 @@ export function AiInsight({ farmerId, mode, coords, year, buttonLabel, descripti
           onChange={(e) => setQuestion(e.target.value)}
           rows={2}
           placeholder={isMeteo
-            ? "Например: «Стоит ли в этом году сеять подсолнечник или лучше пшеницу?»"
-            : "Например: «Что мне стоит улучшить, чтобы получать больше субсидий в следующем году?»"}
-          className="w-full mt-3 border border-border rounded px-3 py-2 bg-card text-sm"
+            ? "Например: «Что лучше посеять в этом году — подсолнечник или пшеницу?»"
+            : "Например: «Что улучшить, чтобы получать больше субсидий?»"}
+          className="w-full mt-3 border border-border-soft rounded-xl px-3.5 py-2.5 bg-background-elev text-sm focus:border-violet-400 focus:outline-none"
         />
       )}
 
@@ -84,23 +87,23 @@ export function AiInsight({ farmerId, mode, coords, year, buttonLabel, descripti
           type="button"
           onClick={run}
           disabled={loading}
-          className="px-3 py-2 rounded bg-violet-600 text-white text-sm hover:bg-violet-700 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 shadow-soft hover:shadow-pop transition"
         >
-          {loading ? "генерация…" : (buttonLabel ?? (isFarmer ? "Спросить AI" : isMeteo ? "Получить совет" : "Сгенерировать разбор"))}
+          {loading ? "думаю…" : (buttonLabel ?? (isFarmer ? "Спросить ИИ" : isMeteo ? "Получить совет" : "Получить разбор"))}
         </button>
-        {!error && !text && <span className="text-xs text-foreground/50">Запрос идёт через серверный прокси, ваш ключ остаётся на сервере.</span>}
+        {!error && !text && <span className="text-xs text-foreground/50">Ваши данные никуда не передаются — всё идёт через защищённый сервер.</span>}
       </div>
 
       {error && (
         <div className="mt-4 p-3 rounded border border-rose-200 bg-rose-50 text-sm text-rose-900">
-          <div className="font-medium">Не удалось получить ответ</div>
+          <div className="font-medium">Не получилось получить ответ</div>
           <div className="mt-1 text-xs">{error}</div>
           {hint && <div className="mt-2 text-xs">{hint}</div>}
         </div>
       )}
 
       {text && (
-        <div className="mt-4 prose prose-sm max-w-none border border-border rounded bg-muted/30 p-4 whitespace-pre-wrap text-sm leading-relaxed">
+        <div className="mt-4 prose prose-sm max-w-none border border-violet-200 rounded-xl bg-violet-50/40 p-4 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
           {text}
         </div>
       )}

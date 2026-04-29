@@ -47,7 +47,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
   const realEfficiency = isReal ? scoreFromUserFields(userFields) : 100;
   const efficiency = isReal ? realEfficiency : (verdict?.efficiencyScore ?? 100);
   const zone = efficiency >= 75 ? "green" : efficiency >= 45 ? "amber" : "red";
-  const zoneText = zone === "green" ? "Зелёная зона" : zone === "amber" ? "Жёлтая зона — внимание" : "Красная зона — действия";
+  const zoneText = zone === "green" ? "Всё хорошо" : zone === "amber" ? "Есть, что улучшить" : "Нужно действовать";
   const zoneCls = zone === "green"
     ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
     : zone === "amber"
@@ -66,7 +66,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-foreground-soft font-medium">
-                {isReal ? "Личный кабинет (вы вошли)" : "Личный кабинет фермера · демо-режим"}
+                {isReal ? "Ваш кабинет" : "Кабинет фермера · демо"}
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1.5">{farmer.legalName}</h1>
               <div className="text-sm text-foreground-soft mt-1">
@@ -75,14 +75,14 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
               <div className="text-sm text-foreground-soft mt-0.5">{farmer.region.oblast}, {farmer.region.rayon}</div>
               {isReal && userFields.length > 0 && (
                 <div className="text-xs text-foreground/70 mt-2">
-                  Привязано через Гипрозем: <strong>{userFields.length}</strong> хозяйств · {userFields.reduce((s, f) => s + f.parcels, 0)} участков
+                  Подключено: <strong>{userFields.length}</strong> хозяйств · {userFields.reduce((s, f) => s + f.parcels, 0)} полей
                 </div>
               )}
             </div>
             <div className="flex items-center gap-3 self-start">
               {isReal ? <LogoutButton /> : (
                 <>
-                  <span className="text-xs text-foreground-soft">демо-вход:</span>
+                  <span className="text-xs text-foreground-soft">сменить хозяйство:</span>
                   <FarmerSwitcher activeId={farmer.id} />
                 </>
               )}
@@ -94,10 +94,10 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
               {zoneText}
             </div>
             <div className="text-foreground/80 mt-1">
-              Скоринг эффективности: <strong>{efficiency}/100</strong>.
-              {zone === "green" && " Продолжайте в том же духе."}
-              {zone === "amber" && " Есть факторы, на которые стоит обратить внимание."}
-              {zone === "red" && " Срочно проверьте рекомендации ниже."}
+              Оценка вашей работы: <strong>{efficiency}/100</strong>.
+              {zone === "green" && " Так держать — претензий не будет."}
+              {zone === "amber" && " Гляньте советы ниже, там подсказки, что подтянуть."}
+              {zone === "red" && " Срочно посмотрите советы ниже — иначе могут проверить."}
             </div>
           </div>
         </div>
@@ -105,19 +105,19 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
 
       {!isReal && verdict && (
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Stat icon={<IconCoin size={14} />} label="Получено субсидий" value={formatTenge(verdict.totalSubsidyTenge)} sub={`сезон ${season?.year ?? herd?.year ?? "—"}`} />
-          <Stat icon={<IconChart size={14} />} label="Эффективность" value={`${efficiency}/100`} accent={zone === "green" ? "ok" : zone === "amber" ? "warn" : "high"} />
+          <Stat icon={<IconCoin size={14} />} label="Получено субсидий" value={formatTenge(verdict.totalSubsidyTenge)} sub={`за ${season?.year ?? herd?.year ?? "—"} год`} />
+          <Stat icon={<IconChart size={14} />} label="Оценка работы" value={`${efficiency}/100`} accent={zone === "green" ? "ok" : zone === "amber" ? "warn" : "high"} />
           <Stat
             icon={<IconSprout size={14} />}
-            label="Потенциал поля"
+            label="Может вырасти"
             value={exp ? `${exp.expected} ц/га` : "—"}
-            sub={season ? `${CROP_LABEL[season.crop]} · эталон ${exp?.base} ц/га` : "—"}
+            sub={season ? `${CROP_LABEL[season.crop]} · обычно ${exp?.base} ц/га` : "—"}
           />
           <Stat
             icon={<IconFile size={14} />}
-            label="Заявлено в Qoldau"
+            label="Вы заявили"
             value={season ? `${season.declaredYieldCha} ц/га` : "—"}
-            sub={exp && season ? (season.declaredYieldCha > exp.expected * 1.2 ? "выше потенциала" : "в норме") : undefined}
+            sub={exp && season ? (season.declaredYieldCha > exp.expected * 1.2 ? "больше, чем может вырасти" : "в норме") : undefined}
             accent={exp && season ? (season.declaredYieldCha > exp.expected * 1.2 ? "high" : "ok") : undefined}
           />
         </section>
@@ -126,20 +126,20 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
       {isReal && userFields.length > 0 && (
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Stat icon={<IconBuilding size={14} />} label="Хозяйств" value={userFields.length} />
-          <Stat icon={<IconLayers size={14} />} label="Участков" value={userFields.reduce((s, f) => s + f.parcels, 0)} />
+          <Stat icon={<IconLayers size={14} />} label="Полей" value={userFields.reduce((s, f) => s + f.parcels, 0)} />
           <Stat
             icon={<IconSprout size={14} />}
-            label="Средний P в почве"
+            label="Фосфор в почве"
             value={`${avgFieldP(userFields).toFixed(1)} мг/кг`}
-            sub="по всем привязкам"
+            sub="среднее по полям"
             accent={avgFieldP(userFields) < 15 ? "warn" : "ok"}
           />
-          <Stat icon={<IconChart size={14} />} label="Эффективность" value={`${efficiency}/100`} accent={zone === "green" ? "ok" : zone === "amber" ? "warn" : "high"} />
+          <Stat icon={<IconChart size={14} />} label="Оценка работы" value={`${efficiency}/100`} accent={zone === "green" ? "ok" : zone === "amber" ? "warn" : "high"} />
         </section>
       )}
 
       <Card>
-        <CardHeader title={`Рекомендации · ${advice.length}`} subtitle={isReal ? "На основе ваших привязанных участков Гипрозема." : "Действия от AI-помощника на основе ваших данных."} />
+        <CardHeader title={`Советы · ${advice.length}`} subtitle={isReal ? "На основе ваших полей." : "Что советует ИИ по вашим данным."} />
         <div className="divide-y divide-border">
           {advice.map((a) => <AdviceItem key={a.id} a={a} farmerQuery={q} />)}
         </div>
@@ -149,15 +149,15 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
         <AiInsight
           farmerId={farmer.id}
           mode="farmer_chat"
-          description="Задайте вопрос — получите развёрнутый ответ от GPT-4o с учётом всех ваших данных."
+          description="Задайте любой вопрос — ИИ ответит с учётом ваших данных."
         />
       )}
 
       <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <ModuleTile href={`/farmer/passport${q}`} icon={<IconMap size={18} />} title="Цифровой паспорт участка" desc="Агрохимия каждого поля, динамика и потенциал" />
-        <ModuleTile href={`/farmer/calculator${q}`} icon={<IconCalculator size={18} />} title="Калькулятор субсидий" desc="Какой объём удобрений и какой урожай — оптимально" />
-        <ModuleTile href={`/farmer/meteo${q}`} icon={<IconCloud size={18} />} title="Метео-ассистент" desc="Реальная погода Open-Meteo + страховые риски" />
-        <ModuleTile href={`/farmer/applications${q}`} icon={<IconFile size={18} />} title="Заявки и документы" desc="Чеки, счета, статус заявок в Qoldau" />
+        <ModuleTile href={`/farmer/passport${q}`} icon={<IconMap size={18} />} title="Мои поля" desc="Состав почвы, какой урожай ждать, что подсевать" />
+        <ModuleTile href={`/farmer/calculator${q}`} icon={<IconCalculator size={18} />} title="Калькулятор" desc="Сколько удобрений купить и сколько денег получить" />
+        <ModuleTile href={`/farmer/meteo${q}`} icon={<IconCloud size={18} />} title="Погода" desc="Прогноз и риски на сезон" />
+        <ModuleTile href={`/farmer/applications${q}`} icon={<IconFile size={18} />} title="Заявки" desc="Чеки, счета и статус заявок" />
       </section>
     </div>
   );
@@ -187,32 +187,32 @@ function buildRealAdvice(user: User): Advice[] {
       out.push({
         id: `p-${f.nazvxoz}`,
         level: "alert",
-        title: `Острый дефицит фосфора: ${f.nazvxoz}`,
-        body: `По данным Гипрозема P=${f.sample.p} мг/кг (норма ≥ 15). Без фосфорных удобрений потенциал участка падает на 40%+. Закажите 60–80 кг/га суперфосфата.`,
-        action: "Открыть калькулятор", module: "calculator",
+        title: `Очень мало фосфора: ${f.nazvxoz}`,
+        body: `Фосфора ${f.sample.p} мг/кг — это сильно ниже нормы (нужно от 15). Без фосфорных удобрений урожай будет на 40% ниже. Закупите 60–80 кг суперфосфата на гектар.`,
+        action: "Посчитать", module: "calculator",
       });
     } else if ((f.sample?.p ?? 99) < 15) {
       out.push({
         id: `p2-${f.nazvxoz}`,
         level: "warn",
-        title: `Дефицит фосфора: ${f.nazvxoz}`,
-        body: `P=${f.sample.p} мг/кг (норма ≥ 15). Заложите фосфорные удобрения в план следующего сезона.`,
+        title: `Маловато фосфора: ${f.nazvxoz}`,
+        body: `Фосфора ${f.sample.p} мг/кг (нужно от 15). Запланируйте фосфорные удобрения на следующий сезон.`,
       });
     }
     if ((f.sample?.gum ?? 99) < 2) {
       out.push({
         id: `g-${f.nazvxoz}`,
         level: "warn",
-        title: `Бедный гумус: ${f.nazvxoz}`,
-        body: `Гумус ${f.sample.gum}% (норма ≥ 3%). Запланируйте внесение 25–30 т/га органики или сидераты на зелёное удобрение.`,
+        title: `Мало гумуса: ${f.nazvxoz}`,
+        body: `Гумуса ${f.sample.gum}% (норма от 3%). Внесите 25–30 тонн органики на гектар или посейте сидераты — это улучшит почву.`,
       });
     }
     if (f.sample?.yearob && f.sample.yearob < new Date().getFullYear() - 6) {
       out.push({
         id: `y-${f.nazvxoz}`,
         level: "info",
-        title: `Старое обследование: ${f.nazvxoz}`,
-        body: `Последнее агрохимобследование — ${f.sample.yearob} год. Закажите новое (по нормам — раз в 4–5 лет).`,
+        title: `Давно не проверяли почву: ${f.nazvxoz}`,
+        body: `Последний анализ почвы был в ${f.sample.yearob} году. По правилам — нужно раз в 4–5 лет. Закажите новый.`,
       });
     }
   }
@@ -220,8 +220,8 @@ function buildRealAdvice(user: User): Advice[] {
     out.push({
       id: "all-good",
       level: "info",
-      title: "Хозяйство в норме",
-      body: "По вашим привязкам Гипрозема состояние почв удовлетворительное. Подавайте субсидии без опасений за обоснованность.",
+      title: "С хозяйством всё в порядке",
+      body: "По вашим полям почва в норме. Можно подавать заявки на субсидии — претензий быть не должно.",
     });
   }
   return out;
@@ -240,7 +240,7 @@ function AdviceItem({ a, farmerQuery }: { a: Advice; farmerQuery: string }) {
     warn:  "bg-amber-500",
     alert: "bg-rose-500",
   };
-  const label: Record<string, string> = { info: "инфо", tip: "совет", warn: "внимание", alert: "критично" };
+  const label: Record<string, string> = { info: "к сведению", tip: "совет", warn: "внимание", alert: "срочно" };
   return (
     <div className="relative px-5 py-4 hover:bg-muted-2/40 transition">
       <span className={`absolute left-0 top-4 bottom-4 w-0.5 rounded-r-full ${stripe[a.level]}`} aria-hidden />

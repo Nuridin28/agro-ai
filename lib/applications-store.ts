@@ -45,6 +45,13 @@ export async function getStoredApplicationsFor(farmerId: string): Promise<Stored
   return all.filter((a) => a.farmerId === farmerId).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 }
 
+// Все поданные через форму заявки — для инспекторского дашборда.
+// Сортированы по дате подачи, новые сверху.
+export async function getAllStoredApplications(): Promise<StoredApplication[]> {
+  const all = await readAll();
+  return all.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+}
+
 export interface NewApplicationInput {
   farmerId: string;
   category: SubsidyCategory;
