@@ -10,6 +10,13 @@ export type CheckCode =
   | "CROP_AGROCHEM_DEFICIT"        // P/K/микро дефицит → удобрения «не сработали бы»
   | "CROP_FERTILIZER_GAP"          // субсидия за удобрения, но низкая норма на га
   | "CROP_FAKE_SOWING"             // дата посева до прогрева почвы
+  | "CROP_NO_VEGETATION"           // спутник: NDVI max < порога — посева не было
+  | "CROP_LATE_GROWTH"             // спутник: рост стартовал заметно позже заявленного
+  | "CROP_WEAK_VEGETATION"         // спутник: пик NDVI ниже норматива
+  | "CROP_POST_SUBSIDY_INACTIVE"   // спутник: после выдачи субсидии — нет агроактивности
+  | "CROP_HETEROGENEOUS_FIELD"     // спутник: высокая σ NDVI — мозаичная пашня
+  | "CROP_SLOW_GROWTH"             // спутник: низкая скорость прироста NDVI при субсидии
+  | "CROP_YOY_DECLINE"             // спутник: пик NDVI заметно ниже прошлогоднего
   // Скотоводство
   | "LIV_BULL_REPRO_GAP"           // быки куплены — приплода нет
   | "LIV_GENETIC_NO_GAIN"          // нет прироста привеса от племенных быков

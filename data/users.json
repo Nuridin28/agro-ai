@@ -1,0 +1,31 @@
+[
+  {
+    "email": "farmer@demo.kz",
+    "farmName": "КХ Утеулин",
+    "ownerFio": "",
+    "bin": "",
+    "passwordHash": "02af68d72bf3f980b6fb145e03a2f57d6745941b467063796c89021d384a9eb31fbf2c48123d9018a13eabca1942b80e3fd9f8672771add69a755b1a38b9b709",
+    "passwordSalt": "187c08627f038a504689341453797774",
+    "fields": [
+      {
+        "nazvxoz": "КХ Утеулин",
+        "layerId": 157,
+        "layerName": "ah_12_183",
+        "oblastCode": "12",
+        "parcels": 20,
+        "sample": {
+          "n": 48.65,
+          "p": 13.28,
+          "k": 478.25,
+          "gum": 2.38,
+          "ph": 6.71,
+          "nazvxoz": "КХ Утеулин",
+          "yearob": 2016,
+          "s": 292
+        }
+      }
+    ],
+    "id": "739c3094fc4b445b55",
+    "createdAt": "2026-04-29T09:09:24.176Z"
+  }
+]

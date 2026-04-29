@@ -1,65 +1,318 @@
-import Image from "next/image";
+import Link from "next/link";
+import { FARMERS } from "@/lib/mock/farmers";
+import {
+  IconArrowRight, IconSparkle, IconShield, IconSprout, IconMap,
+  IconCalculator, IconCloud, IconFile, IconChart, IconLink, IconLayers,
+} from "@/components/Icon";
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="space-y-20 max-w-6xl mx-auto -mt-2">
+      {/* HERO */}
+      <section className="relative overflow-hidden rounded-[28px] border border-border-soft bg-hero shadow-card animate-fade-up">
+        <div className="absolute inset-0 bg-grid opacity-[0.35] pointer-events-none" />
+        <div className="absolute -top-32 -right-24 w-105 h-105 rounded-full gradient-accent opacity-25 blur-3xl pointer-events-none animate-float" />
+        <div className="absolute -bottom-40 -left-20 w-90 h-90 rounded-full bg-lime-300 opacity-25 blur-3xl pointer-events-none" />
+
+        <div className="relative grid lg:grid-cols-12 gap-10 px-6 sm:px-10 py-14 sm:py-20 items-center">
+          <div className="lg:col-span-7">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card/80 border border-border-soft text-[11px] uppercase tracking-wider text-foreground-soft shadow-soft backdrop-blur">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <IconSparkle size={12} className="text-emerald-600" />
+              AgroForensics KZ · прототип
+            </div>
+            <h1 className="text-4xl sm:text-5xl lg:text-[60px] font-bold tracking-tight mt-5 leading-[1.02]">
+              <span className="text-gradient-accent">AI-верификация</span>
+              <br />
+              субсидий АПК
+              <br />
+              <span className="text-foreground-soft text-3xl sm:text-4xl lg:text-5xl">в одном окне</span>
+            </h1>
+            <p className="text-base sm:text-lg text-foreground-soft mt-6 max-w-xl leading-relaxed">
+              Сводим паспорта животных, агрохимию полей, кадастр, заявки на субсидии и метеоданные.
+              Прозрачно — фермеру, форензически точно — инспектору ДЭР.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Link href="/farmer" className="btn btn-primary">
+                <IconSprout size={16} />
+                Войти как фермер
+                <IconArrowRight size={14} />
+              </Link>
+              <Link href="/inspector" className="btn btn-ghost">
+                <IconShield size={16} />
+                Кабинет инспектора
+              </Link>
+            </div>
+
+            <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border-soft bg-border-soft max-w-md">
+              <HeroStat icon={<IconBuildingMini />} label="хозяйств" value={FARMERS.length} />
+              <HeroStat icon={<IconLink size={14} />} label="источников" value={9} />
+              <HeroStat icon={<IconChart size={14} />} label="правил риска" value={14} />
+            </div>
+          </div>
+
+          {/* RIGHT: bento mosaic preview */}
+          <div className="lg:col-span-5 relative">
+            <div className="grid grid-cols-6 gap-3">
+              <PreviewCard className="col-span-6" tone="emerald">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-8 h-8 rounded-lg gradient-accent text-white grid place-items-center"><IconSparkle size={16} /></span>
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wider text-foreground-soft">AI-разбор</div>
+                      <div className="text-sm font-semibold">Скоринг 87 / 100</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">зелёная зона</span>
+                </div>
+                <div className="mt-3 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full gradient-accent" style={{ width: "87%" }} />
+                </div>
+              </PreviewCard>
+
+              <PreviewCard className="col-span-3">
+                <div className="text-[11px] uppercase tracking-wider text-foreground-soft">Урожай</div>
+                <div className="text-2xl font-bold tabular-nums mt-1">23.4<span className="text-sm text-foreground-soft ml-1">ц/га</span></div>
+                <div className="mt-2 flex items-end gap-1 h-8">
+                  {[40, 55, 35, 70, 60, 85, 75].map((h, i) => (
+                    <div key={i} className="flex-1 rounded-sm gradient-accent opacity-80" style={{ height: `${h}%` }} />
+                  ))}
+                </div>
+              </PreviewCard>
+
+              <PreviewCard className="col-span-3">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-foreground-soft">
+                  <IconCloud size={12} /> Метео
+                </div>
+                <div className="text-2xl font-bold tabular-nums mt-1">+18°<span className="text-sm text-foreground-soft ml-1">пик</span></div>
+                <div className="text-[11px] text-foreground-soft mt-2">снег сошёл 3 дня назад</div>
+              </PreviewCard>
+
+              <PreviewCard className="col-span-6" tone="amber">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-md bg-amber-100 text-amber-700 grid place-items-center"><IconAlertMini /></span>
+                    <div>
+                      <div className="text-sm font-medium">Возможна приписка урожая</div>
+                      <div className="text-[11px] text-foreground-soft">Заявлено 32 ц/га при дефиците P</div>
+                    </div>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-wider text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">аудит</span>
+                </div>
+              </PreviewCard>
+            </div>
+
+            {/* glow */}
+            <div className="absolute -inset-6 -z-10 rounded-[40px] gradient-accent opacity-10 blur-2xl pointer-events-none" />
+          </div>
+        </div>
+      </section>
+
+      {/* FEATURE GRID */}
+      <section className="space-y-6">
+        <div className="text-center max-w-2xl mx-auto">
+          <div className="text-[11px] uppercase tracking-wider text-foreground-soft">Возможности</div>
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1">Шесть инструментов вместо шести вкладок в браузере</h2>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Feature icon={<IconMap size={18} />}        title="Цифровой паспорт участка" desc="Агрохимия каждого поля по данным Гипрозема, динамика, потенциал по культурам." />
+          <Feature icon={<IconCalculator size={18} />} title="Калькулятор субсидий"     desc="Какой объём удобрений и какой урожай — оптимально, по нормам Liebig." />
+          <Feature icon={<IconCloud size={18} />}      title="Метео-ассистент"           desc="Снег, прогрев, страховые риски и предупреждения по вашему КАТО." />
+          <Feature icon={<IconFile size={18} />}       title="Цифровая подача заявок"    desc="Чеки, счета-фактуры, статусы заявок Qoldau — без бумажного документооборота." />
+          <Feature icon={<IconShield size={18} />}     title="Forensic-движок"           desc="14 правил: приписки, фикт. посев, перегруз пастбищ, вет-разрыв и др." />
+          <Feature icon={<IconLayers size={18} />}     title="Трекинг источников"        desc="Каждый вывод связан со строкой в ИСЖ, Plem.kz, VETIS, Qoldau, БНС." />
+        </div>
+      </section>
+
+      {/* ROLE CARDS */}
+      <section className="grid md:grid-cols-2 gap-5">
+        <RoleCard
+          href="/farmer"
+          tone="emerald"
+          icon={<IconSprout size={20} />}
+          title="Личный кабинет фермера"
+          tag="«Прозрачный бизнес»"
+          desc="Снижайте риск проверок за счёт самодекларирования и AI-рекомендаций."
+          bullets={[
+            "Цифровой паспорт каждого участка",
+            "Калькулятор субсидий по нормам",
+            "Метео-ассистент и страховые риски",
+            "Цифровая подача чеков, счетов-фактур",
+            "Трекер эффективности и рекультивация",
+          ]}
+          cta="Войти как фермер"
+          delay={1}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        <RoleCard
+          href="/inspector"
+          tone="rose"
+          icon={<IconShield size={20} />}
+          title="Кабинет инспектора ДЭР"
+          tag="Forensic"
+          desc="Анализ субсидирования и выявление фрод-кейсов с пояснением на человеческом языке."
+          bullets={[
+            "Реестр получателей с сортировкой по риску",
+            "Детальное досье и трекинг источников",
+            "14 правил: приписки, фикт. посев, перегруз",
+            "Прозрачные ссылки на ИСЖ, Plem.kz, VETIS",
+            "Сумма к возврату по каждому нарушению",
+          ]}
+          cta="Войти как инспектор"
+          delay={2}
+        />
+      </section>
+
+      {/* DEMO ENTRIES */}
+      <section className="rounded-3xl border border-border-soft bg-card p-6 sm:p-8 shadow-soft animate-fade-up animate-delay-3">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-foreground-soft">
+              <IconSparkle size={12} className="text-emerald-600" />
+              Быстрый старт
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight mt-1">Демо-входы для фермеров</h2>
+            <p className="text-sm text-foreground-soft mt-1.5 max-w-2xl">
+              Прототип содержит {FARMERS.length} мок-фермеров — от чистых до фрод-кейсов.
+              Зайдите под любым, чтобы увидеть, как меняются дашборд и AI-рекомендации.
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-6">
+          {FARMERS.slice(0, 9).map((f) => (
+            <Link
+              key={f.id}
+              href={`/farmer?as=${f.id}`}
+              className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-border-soft bg-background-elev hover:bg-card hover:border-accent/50 hover:shadow-soft transition"
+            >
+              <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 grid place-items-center font-mono text-[10px] font-bold border border-emerald-100 shrink-0">
+                {f.id.replace("F-", "")}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium truncate">{f.legalName}</div>
+                <div className="text-[11px] text-foreground-soft truncate">{f.region.oblast}</div>
+              </div>
+              <IconArrowRight size={14} className="text-foreground-soft group-hover:text-accent group-hover:translate-x-0.5 transition" />
+            </Link>
+          ))}
         </div>
-      </main>
+      </section>
     </div>
+  );
+}
+
+function HeroStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string }) {
+  return (
+    <div className="bg-card/90 backdrop-blur px-4 py-3.5">
+      <div className="flex items-center gap-1.5 text-foreground-soft mb-0.5">{icon}<span className="text-[10.5px] uppercase tracking-wider">{label}</span></div>
+      <div className="text-[22px] font-bold tabular-nums leading-none">{value}</div>
+    </div>
+  );
+}
+
+function PreviewCard({ children, className = "", tone = "default" }: { children: React.ReactNode; className?: string; tone?: "default" | "emerald" | "amber" }) {
+  const ring =
+    tone === "emerald" ? "ring-1 ring-emerald-100" :
+    tone === "amber" ? "ring-1 ring-amber-100" : "";
+  return (
+    <div className={`bg-card border border-border-soft rounded-2xl p-4 shadow-soft ${ring} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+  return (
+    <div className="group bg-card border border-border-soft rounded-2xl p-5 shadow-soft lift">
+      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center group-hover:gradient-accent group-hover:text-white transition">
+        {icon}
+      </div>
+      <div className="text-sm font-semibold tracking-tight mt-4">{title}</div>
+      <div className="text-xs text-foreground-soft mt-1.5 leading-relaxed">{desc}</div>
+    </div>
+  );
+}
+
+function RoleCard({
+  href, tone, icon, title, tag, desc, bullets, cta, delay,
+}: {
+  href: string;
+  tone: "emerald" | "rose";
+  icon: React.ReactNode;
+  title: string;
+  tag: string;
+  desc: string;
+  bullets: string[];
+  cta: string;
+  delay: 1 | 2;
+}) {
+  const tagCls =
+    tone === "emerald"
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : "bg-rose-50 text-rose-700 border-rose-200";
+  const ctaCls =
+    tone === "emerald"
+      ? "text-emerald-700 group-hover:text-emerald-800"
+      : "text-rose-700 group-hover:text-rose-800";
+  const hoverBorder =
+    tone === "emerald" ? "hover:border-emerald-300" : "hover:border-rose-300";
+  const dotCls = tone === "emerald" ? "bg-emerald-500" : "bg-rose-500";
+  const iconCls =
+    tone === "emerald"
+      ? "bg-emerald-50 text-emerald-700 group-hover:gradient-accent group-hover:text-white"
+      : "bg-rose-50 text-rose-700 group-hover:bg-rose-600 group-hover:text-white";
+  const delayCls = delay === 1 ? "animate-delay-1" : "animate-delay-2";
+
+  return (
+    <Link
+      href={href}
+      className={`group relative block rounded-3xl border border-border-soft bg-card p-7 shadow-soft hover:shadow-card ${hoverBorder} transition animate-fade-up ${delayCls}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={`w-11 h-11 rounded-xl grid place-items-center transition ${iconCls}`}>{icon}</span>
+          <div>
+            <div className="text-[20px] font-semibold tracking-tight">{title}</div>
+            <span className={`mt-1 inline-flex items-center text-[10.5px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full border ${tagCls}`}>
+              {tag}
+            </span>
+          </div>
+        </div>
+      </div>
+      <p className="text-sm text-foreground-soft mt-4 leading-relaxed">{desc}</p>
+
+      <ul className="mt-5 space-y-2">
+        {bullets.map((b) => (
+          <li key={b} className="text-sm text-foreground/85 flex items-start gap-2.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${dotCls} mt-1.5 shrink-0`} />
+            <span>{b}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className={`mt-6 inline-flex items-center gap-1 text-sm font-medium ${ctaCls}`}>
+        {cta}
+        <IconArrowRight size={14} className="transition group-hover:translate-x-1" />
+      </div>
+    </Link>
+  );
+}
+
+function IconBuildingMini() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="1.5" />
+      <path d="M9 9h.01M14 9h.01M9 14h.01M14 14h.01" />
+    </svg>
+  );
+}
+
+function IconAlertMini() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4 2 20h20L12 4Z" />
+      <path d="M12 10v4M12 17v.01" />
+    </svg>
   );
 }
