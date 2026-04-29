@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { queryGiprozem, buildNameQuery } from "@/lib/giprozem";
+import { buildNameQuery } from "@/lib/giprozem";
+import { queryGiprozemCached } from "@/lib/giprozem-cache";
 import { GIPROZEM_LAYERS, OBLAST_NAMES } from "@/lib/giprozem-catalog";
 
 // Поиск хозяйства в Гипрозем по фрагменту названия. Возвращает агрегированный
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   await scanInBatches(GIPROZEM_LAYERS, CONCURRENCY, async (layer) => {
     try {
-      const data = await queryGiprozem(params, layer.id);
+      const data = await queryGiprozemCached(params, layer.id);
       for (const f of data.features) {
         const name = f.attributes.nazvxoz;
         if (!name) continue;

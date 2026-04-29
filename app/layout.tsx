@@ -43,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <footer className="border-t border-border-soft mt-12 bg-background-elev/60">
           <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="text-xs text-foreground-soft">
-              <span className="font-medium text-foreground">Демо-версия</span> · данные взяты как будто из этих госбаз
+              <span className="font-medium text-foreground">Демо-версия</span> · данные взяты из этих госбаз
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {SOURCE_LINKS.map((s) => (
