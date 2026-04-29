@@ -19,7 +19,7 @@ export default function LandingPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card/80 border border-border-soft text-[11px] uppercase tracking-wider text-foreground-soft shadow-soft backdrop-blur">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <IconSparkle size={12} className="text-emerald-600" />
-              AgroForensics KZ · демо
+              AltynDala · демо
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-[60px] font-bold tracking-tight mt-5 leading-[1.02]">
               <span className="text-gradient-accent">Помогаем</span>

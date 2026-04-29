@@ -36,10 +36,10 @@ const INACT_BG: Record<InactivityLevel, string> = {
 };
 
 const INACT_LABEL: Record<InactivityLevel, string> = {
-  OK:         "Активность есть",
-  WATCH:      "Окно открыто",
-  SUSPICIOUS: "Подозрение",
-  ALERT:      "Алерт",
+  OK:         "Поле обрабатывается",
+  WATCH:      "Ждём данных",
+  SUSPICIOUS: "Подозрение на простой",
+  ALERT:      "Поле не обрабатывалось",
 };
 
 const VEG_LABEL: Record<string, string> = {
@@ -62,17 +62,24 @@ export function SatelliteCard({ spatial, inactivity, className = "" }: Props) {
   return (
     <Card className={className}>
       <CardHeader
-        title="Спутниковая верификация · NDVI"
-        subtitle={`Sentinel-2 · окно ${spatial.window.startDate} → ${spatial.window.endDate} · провайдер ${spatial.provider}`}
+        title="Спутниковая проверка поля"
+        subtitle={`Снимки Sentinel-2 за сезон ${spatial.window.startDate.slice(0, 4)} (с ${spatial.window.startDate} до ${spatial.window.endDate})`}
         action={
           <div className="flex items-center gap-1.5">
             <span className={`inline-flex items-center text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-md border ${RISK_BG[spatial.riskFlag]}`}>
-              RISK · {spatial.riskFlag}
+              {spatial.riskFlag === "LOW" ? "Без вопросов" : spatial.riskFlag === "MEDIUM" ? "Стоит проверить" : "Высокий риск"}
             </span>
             <SourcePill source={spatial.source} />
           </div>
         }
       />
+
+      <div className="px-5 py-3 text-[12px] text-foreground/70 bg-muted/30 border-t border-border-soft leading-relaxed">
+        <strong className="text-foreground/85">Как это читать:</strong> мы взяли реальные снимки спутника Sentinel-2 (ESA) над контуром поля
+        за весь сезон вегетации. По ним посчитали индекс NDVI — насколько поле зелёное (от −1 до 1).
+        Если есть посев и нормальный рост — индекс плавно растёт с весны до пика в июле и плавно падает к уборке. Если нет посева
+        или поле забросили — индекс остаётся низким. Внизу — три снимка для визуальной проверки и параметры для решения комиссии.
+      </div>
 
       {insufficient ? (
         <div className="px-5 py-4 text-sm text-amber-900 bg-amber-50/60 border-t border-border-soft">
@@ -96,21 +103,26 @@ export function SatelliteCard({ spatial, inactivity, className = "" }: Props) {
         </ul>
       )}
 
-      <div className="border-t border-border-soft px-5 py-3 flex flex-wrap items-start gap-3 justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${INACT_BG[inactivity.level]}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current mr-1" />
-            Inactivity · {INACT_LABEL[inactivity.level]}
-          </span>
-          <span className="text-xs text-foreground/70">
-            baseline {inactivity.baselineDate} · проверено до {inactivity.checkedThrough}
-          </span>
-        </div>
-        <div className="text-xs text-foreground/70 tabular-nums">
-          {inactivity.baselineNDVI !== null && <>NDVI<sub>0</sub> {inactivity.baselineNDVI.toFixed(2)} · </>}
-          {inactivity.recentNDVIMax !== null && <>NDVI<sub>max</sub> {inactivity.recentNDVIMax.toFixed(2)} · </>}
-          {inactivity.deltaNDVI !== null && <>Δ {inactivity.deltaNDVI > 0 ? "+" : ""}{inactivity.deltaNDVI.toFixed(2)} · </>}
-          {inactivity.observationsInWindow} набл.
+      <div className="border-t border-border-soft px-5 py-3 space-y-2">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-foreground/60">Проверка обработки поля после посева</div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border ${INACT_BG[inactivity.level]}`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-current mr-1" />
+                {INACT_LABEL[inactivity.level]}
+              </span>
+              <span className="text-xs text-foreground/70">
+                от {inactivity.baselineDate} до {inactivity.checkedThrough}
+              </span>
+            </div>
+          </div>
+          <div className="text-xs text-foreground/70 tabular-nums text-right">
+            {inactivity.baselineNDVI !== null && <div>Зелень на старте: {inactivity.baselineNDVI.toFixed(2)}</div>}
+            {inactivity.recentNDVIMax !== null && <div>Максимум за окно: {inactivity.recentNDVIMax.toFixed(2)}</div>}
+            {inactivity.deltaNDVI !== null && <div>Прирост зелени: {inactivity.deltaNDVI > 0 ? "+" : ""}{inactivity.deltaNDVI.toFixed(2)}</div>}
+            <div className="text-foreground/55">снимков в окне: {inactivity.observationsInWindow}</div>
+          </div>
         </div>
       </div>
       {inactivity.reasons.length > 0 && (inactivity.level === "SUSPICIOUS" || inactivity.level === "ALERT") && (
@@ -125,9 +137,15 @@ export function SatelliteCard({ spatial, inactivity, className = "" }: Props) {
 function ImageStrip({ images }: { images: SatelliteImage[] }) {
   return (
     <div className="border-t border-border-soft bg-muted/30 px-5 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-foreground/60 mb-2">Снимки Sentinel-2</div>
+      <div className="text-[10px] uppercase tracking-wider text-foreground/60 mb-2">
+        Три снимка поля в ключевые моменты сезона
+      </div>
       <div className="grid grid-cols-3 gap-2">
         {images.map((img, i) => <SatelliteImageThumb key={i} image={img} />)}
+      </div>
+      <div className="text-[10px] text-foreground/55 mt-2 leading-relaxed">
+        RGB — обычная цветная фотография поля сверху. NDVI — карта «насколько зелено»: коричневый — голая земля,
+        жёлтый — слабая трава, зелёный — здоровый посев. Кликните по снимку, чтобы открыть в большом размере.
       </div>
     </div>
   );
@@ -142,15 +160,15 @@ function BasicGrid({
 }) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border-soft border-t border-border-soft">
-      <Stat label="NDVI max"    value={f.ndviMax.toFixed(3)} accent={f.ndviMax < 0.30 ? "high" : undefined} />
-      <Stat label="NDVI mean"   value={f.ndviMean.toFixed(3)} />
-      <Stat label="Вегетация"   value={VEG_LABEL[vegetationLevel] ?? vegetationLevel}
+      <Stat label="Зелень в пике"     value={f.ndviMax.toFixed(2)} sub="NDVI max · 0–1" accent={f.ndviMax < 0.30 ? "high" : undefined} />
+      <Stat label="Зелень в среднем"  value={f.ndviMean.toFixed(2)} sub="NDVI mean за сезон" />
+      <Stat label="Уровень вегетации" value={VEG_LABEL[vegetationLevel] ?? vegetationLevel}
             accent={vegetationLevel === "none" || vegetationLevel === "weak" ? "high" : undefined} />
-      <Stat label="Посев"       value={sowingDetected ? "обнаружен" : "не обнаружен"} accent={sowingDetected ? undefined : "high"} />
-      <Stat label="Старт роста" value={f.growthStartDate ?? "—"} />
-      <Stat label="Пик NDVI"    value={f.peakDate ?? "—"} />
-      <Stat label="Снимков"     value={`${f.pointsUsed} / ${f.pointsUsed + f.pointsDropped}`} />
-      <Stat label="Облачных"    value={`${f.pointsDropped}`} />
+      <Stat label="Посев на спутнике" value={sowingDetected ? "виден" : "не виден"} accent={sowingDetected ? undefined : "high"} />
+      <Stat label="Поле начало зеленеть" value={f.growthStartDate ?? "—"} sub="первая дата с активной вегетацией" />
+      <Stat label="Самый зелёный день"   value={f.peakDate ?? "—"} sub="когда NDVI был максимален" />
+      <Stat label="Ясных снимков"     value={`${f.pointsUsed} / ${f.pointsUsed + f.pointsDropped}`} sub="(использовано / всего)" />
+      <Stat label="Под облаками"      value={`${f.pointsDropped}`} sub="отброшено из расчёта" />
     </div>
   );
 }
@@ -159,32 +177,34 @@ function ExtendedGrid({ f }: { f: NDVIFeatures }) {
   return (
     <div className="border-t border-border-soft bg-muted/20 px-5 py-3">
       <div className="text-[10px] uppercase tracking-wider text-foreground/60 mb-2">
-        Расширенные параметры решения
+        Дополнительные показатели для решения
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SmallStat
-          label="Гетерогенность поля (σ)"
-          value={f.heterogeneityStdev !== null ? f.heterogeneityStdev.toFixed(3) : "—"}
-          hint={f.heterogeneityStdev !== null && f.heterogeneityStdev >= 0.16 ? "мозаичная пашня" : "однородное поле"}
+          label="Однородность поля"
+          value={f.heterogeneityStdev !== null ? f.heterogeneityStdev.toFixed(2) : "—"}
+          hint={f.heterogeneityStdev !== null && f.heterogeneityStdev >= 0.16
+            ? "поле разное по углам — возможно засеяно не всё"
+            : "поле однородное — засеяно равномерно"}
           accent={f.heterogeneityStdev !== null && f.heterogeneityStdev >= 0.16 ? "warn" : undefined}
         />
         <SmallStat
-          label="Скорость прироста NDVI/день"
-          value={f.growthRateNdviPerDay !== null ? f.growthRateNdviPerDay.toFixed(4) : "—"}
+          label="Темп роста зелени"
+          value={f.growthRateNdviPerDay !== null ? `${(f.growthRateNdviPerDay * 1000).toFixed(1)} ‰/день` : "—"}
           hint={f.growthRateNdviPerDay !== null
-            ? f.growthRateNdviPerDay < 0.008 ? "медленно для зерновых" : "норма"
+            ? f.growthRateNdviPerDay < 0.008 ? "слишком медленно — удобрения мало работают" : "нормальный темп для зерновых"
             : ""}
           accent={f.growthRateNdviPerDay !== null && f.growthRateNdviPerDay < 0.008 ? "warn" : undefined}
         />
         <SmallStat
-          label="Дни до пика"
+          label="Сколько дней до пика"
           value={f.daysToPeak !== null ? `${f.daysToPeak} дн.` : "—"}
-          hint="от старта роста до peakDate"
+          hint="от появления всходов до максимума"
         />
         <SmallStat
-          label="Длина сезона"
+          label="Длина зелёного периода"
           value={f.seasonLengthDays !== null ? `${f.seasonLengthDays} дн.` : "—"}
-          hint="green-up до falloff"
+          hint="всходы → начало уборки"
         />
       </div>
     </div>
@@ -195,29 +215,29 @@ function YoYBlock({ yoy, currentMax }: { yoy: YearOverYear; currentMax: number }
   const dropAccent = yoy.ndviMaxDelta !== null && yoy.ndviMaxDelta <= -0.20;
   return (
     <div className="border-t border-border-soft bg-muted/20 px-5 py-3">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
         <div className="text-[10px] uppercase tracking-wider text-foreground/60">
-          Сравнение с {yoy.previousYear} годом (Year-over-Year)
+          Сравнение с прошлым сезоном ({yoy.previousYear})
         </div>
         {yoy.ndviMaxDelta !== null && (
           <span className={`text-[11px] font-mono tabular-nums px-1.5 py-0.5 rounded border ${dropAccent ? "bg-rose-50 text-rose-800 border-rose-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"}`}>
-            Δ NDVI<sub>max</sub> {yoy.ndviMaxDelta > 0 ? "+" : ""}{yoy.ndviMaxDelta.toFixed(2)}
+            Зелень в пике {yoy.ndviMaxDelta > 0 ? "+" : ""}{yoy.ndviMaxDelta.toFixed(2)} vs прошлый год
           </span>
         )}
       </div>
       {yoy.ndviMaxPrev === null ? (
-        <div className="text-xs text-foreground/70">Данных за {yoy.previousYear} недостаточно для сравнения.</div>
+        <div className="text-xs text-foreground/70">Данных за {yoy.previousYear} недостаточно для сравнения (мало ясных снимков).</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <SmallStat label={`NDVI max ${yoy.previousYear}`} value={yoy.ndviMaxPrev.toFixed(3)} />
-          <SmallStat label="NDVI max сейчас" value={currentMax.toFixed(3)} accent={dropAccent ? "warn" : undefined} />
+          <SmallStat label={`Зелень в ${yoy.previousYear}`} value={yoy.ndviMaxPrev.toFixed(2)} />
+          <SmallStat label="Зелень сейчас" value={currentMax.toFixed(2)} accent={dropAccent ? "warn" : undefined} />
           <SmallStat
-            label="Старт вегетации"
+            label={`Начало роста в ${yoy.previousYear}`}
             value={yoy.growthStartPrev ?? "—"}
-            hint={yoy.growthStartDeltaDays !== null ? `Δ ${yoy.growthStartDeltaDays > 0 ? "+" : ""}${yoy.growthStartDeltaDays} дн.` : ""}
+            hint={yoy.growthStartDeltaDays !== null ? `${yoy.growthStartDeltaDays > 0 ? "позже" : "раньше"} на ${Math.abs(yoy.growthStartDeltaDays)} дн.` : ""}
             accent={yoy.growthStartDeltaDays !== null && yoy.growthStartDeltaDays > 14 ? "warn" : undefined}
           />
-          <SmallStat label="Тренд" value={dropAccent ? "↓ деградация" : (yoy.ndviMaxDelta !== null && yoy.ndviMaxDelta >= 0.05 ? "↑ улучшение" : "стабильно")}
+          <SmallStat label="Тренд" value={dropAccent ? "↓ хуже" : (yoy.ndviMaxDelta !== null && yoy.ndviMaxDelta >= 0.05 ? "↑ лучше" : "стабильно")}
             accent={dropAccent ? "warn" : undefined} />
         </div>
       )}
@@ -225,11 +245,12 @@ function YoYBlock({ yoy, currentMax }: { yoy: YearOverYear; currentMax: number }
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: React.ReactNode; accent?: "high" }) {
+function Stat({ label, value, sub, accent }: { label: string; value: React.ReactNode; sub?: string; accent?: "high" }) {
   return (
     <div className="bg-card px-4 py-3">
       <div className="text-[10px] uppercase tracking-wider text-foreground/60">{label}</div>
       <div className={`text-sm font-semibold mt-0.5 ${accent === "high" ? "text-rose-700" : ""}`}>{value}</div>
+      {sub && <div className="text-[10px] text-foreground/55 mt-0.5">{sub}</div>}
     </div>
   );
 }

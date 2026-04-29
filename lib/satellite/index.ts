@@ -84,14 +84,20 @@ async function buildImages(
   peakDate: string | null,
 ): Promise<SatelliteImage[]> {
   if (!provider.getImagePNG) return [];
-  const baselineDate = input.expectedSowingDate ?? input.startDate;
-  // Используем первый «не nullovый» день для каждой роли — на крайний
-  // случай fallback на середину окна.
   const midOfWindow = midpointDate(input.startDate, input.endDate);
+  // Если задана expectedSowingDate И она попадает в окно сезона — используем
+  // её как «начало сезона». Иначе — апрель этого сезона (~до посева).
+  const baselineInWindow = input.expectedSowingDate
+    && input.expectedSowingDate >= input.startDate
+    && input.expectedSowingDate <= input.endDate
+    ? input.expectedSowingDate
+    : input.startDate;
+
+  // Подписи в карточке — простым языком, без жаргона "baseline / NDVI peak".
   const dates: { label: string; date: string; kind: SatelliteImageKind }[] = [
-    { label: "baseline · посев",  date: baselineDate,                kind: "ndvi" },
-    { label: "старт вегетации",   date: growthStartDate ?? midOfWindow, kind: "truecolor" },
-    { label: "пик NDVI",          date: peakDate ?? input.endDate,   kind: "ndvi" },
+    { label: "До вегетации",   date: baselineInWindow,                kind: "truecolor" },
+    { label: "Поле зеленеет",  date: growthStartDate ?? midOfWindow,  kind: "ndvi" },
+    { label: "Пик зелени",     date: peakDate ?? input.endDate,       kind: "ndvi" },
   ];
   const out: SatelliteImage[] = [];
   for (const d of dates) {

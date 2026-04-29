@@ -20,8 +20,11 @@ interface MockProps {
 
 interface PolygonProps {
   polygon: FieldPolygon;
-  baselineDate: string;     // дата посева / выдачи субсидии
+  baselineDate: string;     // дата для inactivity-проверки (сезонная, не декларация фермера)
   year: number;             // сезон, за который смотрим
+  // true: сравнивать NDVI с заявленной датой посева (для late_growth-флага).
+  // false: показать NDVI чисто информационно — у фермера нет декларации в этом сезоне.
+  checkAgainstDeclaration?: boolean;
   className?: string;
 }
 
@@ -32,14 +35,17 @@ export async function SatelliteSection(props: Props) {
 
   // Режим polygon-prop (real user)
   if ("polygon" in props) {
-    return renderForPolygon(props.polygon, props.baselineDate, props.year, className);
+    return renderForPolygon(
+      props.polygon, props.baselineDate, props.year, className,
+      props.checkAgainstDeclaration ?? true,
+    );
   }
 
-  // Режим farmerId (demo)
+  // Режим farmerId (demo) — у мок-фермера всегда есть season с декларацией
   const polyRec = polygonForFarmer(props.farmerId);
   const season = seasonFor(props.farmerId);
   if (!polyRec || !season) return null;
-  return renderForPolygon(polyRec.polygon, season.declaredSowingDate, season.year, className);
+  return renderForPolygon(polyRec.polygon, season.declaredSowingDate, season.year, className, true);
 }
 
 async function renderForPolygon(
@@ -47,6 +53,7 @@ async function renderForPolygon(
   baselineDate: string,
   year: number,
   className: string,
+  checkAgainstDeclaration: boolean,
 ) {
   const startDate = `${year}-04-01`;
   const endDate = `${year}-09-30`;
@@ -54,7 +61,9 @@ async function renderForPolygon(
     const [spatial, inactivity] = await Promise.all([
       verifySatellite({
         polygon, startDate, endDate,
-        expectedSowingDate: baselineDate,
+        // expectedSowingDate триггерит late_growth-проверку. Только если у нас
+        // действительно есть декларация фермера за этот сезон.
+        expectedSowingDate: checkAgainstDeclaration ? baselineDate : undefined,
         includeImages: true,
         includeYoY: true,
       }),

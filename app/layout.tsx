@@ -4,7 +4,7 @@ import Link from "next/link";
 import { HeaderNav } from "@/components/HeaderNav";
 
 export const metadata: Metadata = {
-  title: "AgroForensics KZ — помощь фермерам и инспекторам по субсидиям",
+  title: "AltynDala — помощь фермерам и инспекторам по субсидиям",
   description:
     "Сводим данные госбаз про скот, поля, погоду и заявки в одном месте. Фермер получает подсказки и подаёт документы онлайн, инспектор видит подозрительные выплаты с понятным разбором.",
 };
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/" className="flex items-center gap-2.5 group">
               <span className="w-8 h-8 rounded-xl gradient-accent text-accent-fg grid place-items-center font-bold text-sm shadow-soft group-hover:shadow-pop transition">A</span>
               <span className="flex flex-col leading-none">
-                <span className="font-semibold tracking-tight text-[15px]">AgroForensics KZ</span>
+                <span className="font-semibold tracking-tight text-[15px]">AltynDala</span>
                 <span className="text-[10.5px] text-foreground-soft hidden sm:inline mt-0.5">Помощь фермерам и инспекторам по субсидиям</span>
               </span>
             </Link>

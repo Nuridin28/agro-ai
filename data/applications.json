@@ -12,7 +12,7 @@
     "cropDeclaration": {
       "crop": "wheat_spring",
       "areaHa": 200,
-      "declaredYieldCha": 24.0,
+      "declaredYieldCha": 24,
       "fertilizerKgHa": 30,
       "declaredSowingDate": "2024-04-15"
     }
@@ -30,7 +30,7 @@
     "cropDeclaration": {
       "crop": "wheat_spring",
       "areaHa": 100,
-      "declaredYieldCha": 12.0,
+      "declaredYieldCha": 12,
       "fertilizerKgHa": 45,
       "declaredSowingDate": "2024-05-15"
     }
@@ -45,5 +45,23 @@
     "status": "На проверке",
     "date": "2026-04-29",
     "submittedAt": "2026-04-29T12:45:00Z"
+  },
+  {
+    "id": "APP-USER-051ABDBB",
+    "farmerId": "U-bd427ea6f95b20c6e0",
+    "category": "fertilizer",
+    "type": "Субсидия — Удобрения",
+    "scope": "пшеница",
+    "amount": 1200001,
+    "status": "На проверке",
+    "date": "2026-04-29",
+    "submittedAt": "2026-04-29T11:32:46.136Z",
+    "cropDeclaration": {
+      "crop": "wheat_spring",
+      "areaHa": 100,
+      "declaredYieldCha": 15,
+      "fertilizerKgHa": 14,
+      "declaredSowingDate": "2026-04-29"
+    }
   }
 ]

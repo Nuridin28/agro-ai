@@ -320,7 +320,13 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
   const firstField = user.fields[0];
   const oblast = firstField ? OBLAST_NAMES[firstField.oblastCode] ?? "—" : "—";
   const layer = firstField ? findLayer(firstField.layerId) : null;
-  const seasonYear = new Date().getUTCFullYear();
+  // Сезон для NDVI/метео. ВСЕГДА используем «последний завершённый сезон»:
+  // если сейчас до октября — текущая вегетация ещё в разгаре или не началась,
+  // у Sentinel-2 в архиве нет полного ряда снимков → показываем прошлый год.
+  // Если фермер задекларировал посев на будущее (например, на 2026-04-29 в
+  // апреле 2026) — всё равно показываем 2025, иначе SH вернёт INSUFFICIENT_DATA.
+  const now = new Date();
+  const seasonYear = now.getUTCMonth() >= 9 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
 
   // Подгружаем сезонное метео ОДИН раз — используется и в карточке метео,
   // и в проверке заявок (фиктивный посев / дефицит влаги).
@@ -328,15 +334,39 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
     ? await fetchSeason(layer.centroid[0], layer.centroid[1], seasonYear).catch(() => null)
     : null;
 
-  // Полигон поля для спутниковой проверки. Если фермер регистрировался до
-  // включения фичи — у него нет polygon4326, тогда блок не рендерим.
-  const polygon: FieldPolygon | null = firstField?.polygon4326 && firstField.polygon4326.length >= 4
-    ? (firstField.polygon4326 as FieldPolygon)
-    : null;
-  // Baseline для inactivity-проверки: если есть пользовательская заявка с
-  // декларацией — берём её sowing_date, иначе середина мая текущего года.
-  const baselineDate = stored.find((a) => a.cropDeclaration?.declaredSowingDate)?.cropDeclaration?.declaredSowingDate
-    ?? `${seasonYear}-05-15`;
+  // Полигон поля для спутниковой проверки. Приоритет:
+  //  1) сохранённый при регистрации polygon4326 — точный контур поля
+  //  2) фолбэк для старых юзеров: квадрат 3×3 км вокруг центра района Гипрозема
+  //     (хуже точностью, но даёт инспектору хоть какой-то снимок региона)
+  let polygon: FieldPolygon | null = null;
+  let polygonIsApproximate = false;
+  if (firstField?.polygon4326 && firstField.polygon4326.length >= 4) {
+    polygon = firstField.polygon4326 as FieldPolygon;
+  } else if (layer) {
+    // halfDeg ~ 0.015° ≈ 1.5–1.7 км в северном Казахстане
+    const [lat, lng] = layer.centroid;
+    const h = 0.015;
+    polygon = [
+      [lng - h, lat - h],
+      [lng + h, lat - h],
+      [lng + h, lat + h],
+      [lng - h, lat + h],
+      [lng - h, lat - h],
+    ];
+    polygonIsApproximate = true;
+  }
+  // Baseline для спутниковой проверки. ВАЖНО: должен попадать в seasonYear,
+  // иначе мы сравниваем декларацию одного года с NDVI другого года.
+  // Берём sowing_date только если фермер заявил посев в seasonYear; иначе
+  // используем середину мая (типичный посев яровых в северном Казахстане).
+  const seasonDecl = stored.find(
+    (a) => a.cropDeclaration?.declaredSowingDate?.startsWith(`${seasonYear}-`),
+  )?.cropDeclaration?.declaredSowingDate;
+  const baselineDate = seasonDecl ?? `${seasonYear}-05-15`;
+  // Если фермер декларировал посев именно за seasonYear — есть смысл
+  // сравнивать спутник с заявкой; иначе показываем NDVI как информационный
+  // профиль поля, без late_growth-проверки.
+  const useDeclForCheck = !!seasonDecl;
 
   return (
     <div className="space-y-6">
@@ -446,15 +476,29 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
       )}
 
       {polygon ? (
-        <Suspense fallback={<SatelliteCardSkeleton />}>
-          <SatelliteSection polygon={polygon} baselineDate={baselineDate} year={seasonYear} />
-        </Suspense>
+        <>
+          {polygonIsApproximate && (
+            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl px-5 py-3 text-xs text-amber-900">
+              <strong>Приблизительный контур.</strong> Полигон поля не был сохранён при регистрации — показываем
+              снимки квадрата 3×3 км вокруг центра района{layer ? ` ${layer.name}` : ""}. Для точной проверки
+              перерегистрируйте хозяйство, чтобы прикрепить настоящий контур поля.
+            </div>
+          )}
+          <Suspense fallback={<SatelliteCardSkeleton />}>
+            <SatelliteSection
+              polygon={polygon}
+              baselineDate={baselineDate}
+              year={seasonYear}
+              checkAgainstDeclaration={useDeclForCheck && !polygonIsApproximate}
+            />
+          </Suspense>
+        </>
       ) : (
         <Card className="p-5 bg-amber-50/50 border-amber-200">
-          <div className="text-sm font-semibold text-amber-900">Спутниковая проверка не включена</div>
+          <div className="text-sm font-semibold text-amber-900">Спутниковая проверка недоступна</div>
           <div className="text-xs text-amber-900/80 mt-1">
-            Полигон поля не сохранился при регистрации (возможно, регистрация была раньше включения фичи).
-            Перерегистрируйтесь, чтобы прикрепить контур поля для NDVI-мониторинга.
+            У хозяйства нет ни сохранённого контура поля, ни привязки к району Гипрозема.
+            Перерегистрируйте хозяйство через Гипрозем, чтобы открыть NDVI-мониторинг.
           </div>
         </Card>
       )}
