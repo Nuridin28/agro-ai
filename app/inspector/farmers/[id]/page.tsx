@@ -61,8 +61,8 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
   const cropFindings = verdict.findings.filter((f) => f.code.startsWith("CROP_"));
   const livestockFindings = verdict.findings.filter((f) => f.code.startsWith("LIV_"));
 
-  // Мок-история заявок (из verify-движка) + поданные через форму
-  // (`data/applications.json`). Заявки от фермера показываем сверху таблицы.
+  // Мок-история заявок (из verify-движка) + поданные через форму (Postgres).
+  // Заявки от фермера показываем сверху таблицы.
   const mockApps = buildFarmerApplications(farmer.id);
   const stored = await getStoredApplicationsFor(farmer.id);
   const userApps: SubsidyApplication[] = stored.map((s) => ({
