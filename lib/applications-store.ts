@@ -1,21 +1,16 @@
-// Простой JSON-стор для пользовательских заявок на субсидии.
-// На прод заменить на БД (Postgres). В прототипе — `data/applications.json`.
-
-import fs from "node:fs/promises";
-import path from "node:path";
 import crypto from "node:crypto";
+import { desc, eq } from "drizzle-orm";
+import { db } from "./db";
+import { applications } from "./db/schema";
 import type { SubsidyCategory, ApplicationStatus } from "./subsidy-categories";
 import type { Crop } from "./types";
 
-// Опциональные поля, которые задаёт фермер для категорий fertilizer/seeds.
-// Они нужны, чтобы фрод-движок мог реально проверить заявку на разумность
-// (заявленный урожай vs. бонитет/агрохимия/метео).
 export interface CropDeclaration {
   crop: Crop;
   areaHa: number;
-  declaredYieldCha: number;     // заявленная урожайность, ц/га
-  fertilizerKgHa: number;        // факт. закуп удобрений на га
-  declaredSowingDate: string;   // YYYY-MM-DD
+  declaredYieldCha: number;
+  fertilizerKgHa: number;
+  declaredSowingDate: string;
 }
 
 export interface StoredApplication {
@@ -28,43 +23,38 @@ export interface StoredApplication {
   status: ApplicationStatus;
   date: string;
   submittedAt: string;
-  // Опционально для категорий с зерновыми/семенами — добавляется через
-  // расширенную форму. Без этих полей фрод-движок не запускается.
   cropDeclaration?: CropDeclaration;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), "data");
-const FILE = path.join(DATA_DIR, "applications.json");
+type Row = typeof applications.$inferSelect;
 
-async function ensureFile(): Promise<void> {
-  try { await fs.access(FILE); }
-  catch {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    await fs.writeFile(FILE, "[]", "utf8");
-  }
-}
-
-async function readAll(): Promise<StoredApplication[]> {
-  await ensureFile();
-  const raw = await fs.readFile(FILE, "utf8");
-  try { return JSON.parse(raw) as StoredApplication[]; } catch { return []; }
-}
-
-async function writeAll(apps: StoredApplication[]): Promise<void> {
-  await ensureFile();
-  await fs.writeFile(FILE, JSON.stringify(apps, null, 2), "utf8");
+function rowToApp(r: Row): StoredApplication {
+  return {
+    id: r.id,
+    farmerId: r.farmerId,
+    category: r.category as SubsidyCategory,
+    type: r.type,
+    scope: r.scope,
+    amount: r.amount,
+    status: r.status as ApplicationStatus,
+    date: r.date,
+    submittedAt: r.submittedAt.toISOString(),
+    cropDeclaration: (r.cropDeclaration as CropDeclaration | null) ?? undefined,
+  };
 }
 
 export async function getStoredApplicationsFor(farmerId: string): Promise<StoredApplication[]> {
-  const all = await readAll();
-  return all.filter((a) => a.farmerId === farmerId).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const rows = await db
+    .select()
+    .from(applications)
+    .where(eq(applications.farmerId, farmerId))
+    .orderBy(desc(applications.submittedAt));
+  return rows.map(rowToApp);
 }
 
-// Все поданные через форму заявки — для инспекторского дашборда.
-// Сортированы по дате подачи, новые сверху.
 export async function getAllStoredApplications(): Promise<StoredApplication[]> {
-  const all = await readAll();
-  return all.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const rows = await db.select().from(applications).orderBy(desc(applications.submittedAt));
+  return rows.map(rowToApp);
 }
 
 export interface NewApplicationInput {
@@ -77,21 +67,22 @@ export interface NewApplicationInput {
 }
 
 export async function addApplication(input: NewApplicationInput): Promise<StoredApplication> {
-  const all = await readAll();
+  const id = `APP-USER-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
   const now = new Date();
-  const app: StoredApplication = {
-    id: `APP-USER-${crypto.randomBytes(4).toString("hex").toUpperCase()}`,
-    farmerId: input.farmerId,
-    category: input.category,
-    type: input.type,
-    scope: input.scope,
-    amount: input.amount,
-    status: "На проверке",
-    date: now.toISOString().slice(0, 10),
-    submittedAt: now.toISOString(),
-    cropDeclaration: input.cropDeclaration,
-  };
-  all.push(app);
-  await writeAll(all);
-  return app;
+  const [row] = await db
+    .insert(applications)
+    .values({
+      id,
+      farmerId: input.farmerId,
+      category: input.category,
+      type: input.type,
+      scope: input.scope,
+      amount: input.amount,
+      status: "На проверке",
+      date: now.toISOString().slice(0, 10),
+      submittedAt: now,
+      cropDeclaration: input.cropDeclaration ?? null,
+    })
+    .returning();
+  return rowToApp(row);
 }

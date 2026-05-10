@@ -5,10 +5,17 @@ import type { User } from "./users-store";
 import { OBLAST_NAMES, findLayer } from "./giprozem-catalog";
 
 // Резолвим активного фермера для farmer-страниц.
-// Приоритет: ?as=F-XXX (демо) > вошедший пользователь > редирект на /login
+// Приоритет: ?as=F-XXX (демо, только если ENABLE_DEMO_MODE=1) > вошедший пользователь > редирект на /login
 //
 // Возвращаем единый объект, у которого UI берёт «человеческие» поля
 // (название, регион, координаты), не зная — это мок или реальный пользователь.
+
+// Демо-режим включается только если в env стоит ENABLE_DEMO_MODE=1.
+// В проде по умолчанию выключен — иначе любой может зайти на /farmer?as=F-001
+// и увидеть данные демо-фермера без логина.
+function demoEnabled(): boolean {
+  return process.env.ENABLE_DEMO_MODE === "1";
+}
 
 export type FarmerSession =
   | { kind: "demo"; farmer: Farmer; userId: null }
@@ -23,7 +30,7 @@ export interface FarmerSessionLookup {
 // Старая публичная функция (синхронная) для совместимости с теми страницами,
 // которые ещё не используют user-сессию. Используется только в демо-режиме.
 export function resolveFarmer(asParam?: string | null): Farmer {
-  if (asParam) {
+  if (asParam && demoEnabled()) {
     const f = findFarmer(asParam);
     if (f) return f;
   }
@@ -37,7 +44,7 @@ export function farmerQuery(farmerId: string): string {
 // Новая — учитывает реального вошедшего пользователя.
 // Возвращает «совместимый» Farmer, чтобы существующий UI работал без изменений.
 export async function resolveFarmerSession(asParam?: string | null): Promise<FarmerSession | null> {
-  if (asParam) {
+  if (asParam && demoEnabled()) {
     const f = findFarmer(asParam);
     if (f) return { kind: "demo", farmer: f, userId: null };
   }

@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildFarmerContext, buildPortfolioContext, buildMeteoContext } from "@/lib/ai-context";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { getCurrentUser } from "@/lib/get-current-user";
 
 // Прокси к OpenAI Chat Completions.
 // Ключ читается из process.env.OPENAI_API_KEY (только сервер) — фронт его не видит.
@@ -70,6 +72,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Лимит по сессии (или IP) — каждый вызов OpenAI стоит денег, нельзя
+  // оставлять эндпоинт открытым на фарм запросов.
+  const user = await getCurrentUser();
+  const id = user ? `u:${user.id}` : `ip:${clientIp(req)}`;
+  const limit = await rateLimit("ai:analyze", id, user ? 30 : 5, 3600);
+  if (!limit.ok) return tooManyRequests(limit);
+
   let body: Body;
   try { body = await req.json(); } catch { return Response.json({ error: "Bad JSON" }, { status: 400 }); }
   const { mode, farmerId, question, coords, year } = body;
@@ -132,7 +141,8 @@ export async function POST(req: NextRequest) {
 
     if (!upstream.ok) {
       const errText = await upstream.text();
-      return Response.json({ error: `OpenAI ${upstream.status}: ${errText.slice(0, 500)}` }, { status: 502 });
+      console.error("[ai/analyze] OpenAI error", upstream.status, errText.slice(0, 500));
+      return Response.json({ error: "AI-сервис временно недоступен" }, { status: 502 });
     }
     const data = await upstream.json();
     const text = data?.choices?.[0]?.message?.content?.trim();

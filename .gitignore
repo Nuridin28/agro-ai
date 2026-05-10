@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# legacy json store (contains user data; replaced by Postgres)
+/data/*.json
+/data/cache/
+
+# docker volumes / compose overrides
+/docker-compose.override.yml

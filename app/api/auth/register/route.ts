@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { hashPassword, makeSessionCookieValue, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/auth";
 import { createUser, findByEmail, type UserField } from "@/lib/users-store";
+import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
 
 interface RegisterBody {
   email: string;
@@ -12,6 +13,9 @@ interface RegisterBody {
 }
 
 export async function POST(req: NextRequest) {
+  const ipLimit = await rateLimit("register:ip", clientIp(req), 10, 3600);
+  if (!ipLimit.ok) return tooManyRequests(ipLimit);
+
   let body: RegisterBody;
   try { body = await req.json(); } catch { return Response.json({ error: "Bad JSON" }, { status: 400 }); }
 
@@ -22,8 +26,8 @@ export async function POST(req: NextRequest) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     return Response.json({ error: "Некорректный email" }, { status: 400 });
   }
-  if (password.length < 6) {
-    return Response.json({ error: "Пароль минимум 6 символов" }, { status: 400 });
+  if (password.length < 8) {
+    return Response.json({ error: "Пароль минимум 8 символов" }, { status: 400 });
   }
   if (farmName.length < 3) {
     return Response.json({ error: "Название хозяйства минимум 3 символа" }, { status: 400 });

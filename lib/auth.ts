@@ -12,7 +12,13 @@ const SESSION_COOKIE = "agro_session";
 const SESSION_TTL_DAYS = 30;
 
 function secret(): string {
-  return process.env.SESSION_SECRET || "dev-only-not-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET is required in production");
+  }
+  console.warn("[auth] SESSION_SECRET not set — using insecure dev default");
+  return "dev-only-not-secret-change-me";
 }
 
 // ── Пароли ──
