@@ -1,14 +1,23 @@
 import type { Finding } from "@/lib/verify/types";
-import { Card, SeverityBadge, SourcePill, formatTenge } from "./ui";
+import { Card, SeverityBadge, SourcePill, SEVERITY_WEIGHT, formatTenge } from "./ui";
 
 export function FindingCard({ finding }: { finding: Finding }) {
   const f = finding;
+  const points = SEVERITY_WEIGHT[f.severity];
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-start gap-3 justify-between">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <SeverityBadge s={f.severity} />
+            {points > 0 && (
+              <span
+                className="inline-flex items-center text-[10px] font-medium text-foreground/70 bg-muted border border-border rounded-full px-1.5 py-0.5 tabular-nums"
+                title="Вклад в риск-балл хозяйства (0–100). Сумма по всем нарушениям ограничена сверху 100."
+              >
+                +{points} к риск-баллу
+              </span>
+            )}
             <span className="text-[11px] font-mono text-foreground/50">{f.code}</span>
           </div>
           <h3 className="text-base font-semibold mt-1">{f.title}</h3>

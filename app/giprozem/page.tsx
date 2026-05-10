@@ -212,15 +212,15 @@ export default function GiprozemPage() {
     <div className="space-y-6">
       <section>
         <div className="text-xs uppercase tracking-wider text-foreground/60">Live · ArcGIS REST API · portal.giprozem.kz</div>
-        <h1 className="text-2xl font-bold tracking-tight mt-1">Карта агрохимобследования РК</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-1">Карта агрохимобследования РК</h1>
         <p className="text-sm text-foreground/70 mt-1 max-w-3xl">
           Перемещайте и масштабируйте карту — система автоматически дозапрашивает участки во всех районах, попадающих в видимую область.
           Селекторы «Область / Район» работают как быстрый прыжок на интересующее место.
         </p>
       </section>
 
-      <Card className="p-5">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_auto] gap-3 items-end">
+      <Card className="p-4 sm:p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_2fr_1fr_1fr_auto] gap-3 items-end">
           <label className="flex flex-col gap-1">
             <span className="text-xs text-foreground/60">Область (быстрый переход)</span>
             <select
@@ -322,7 +322,7 @@ export default function GiprozemPage() {
         </div>
       </Card>
 
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         <Stat label="Участков в видимой области" value={features.length} sub={features.length === 300 * usedLayers.length ? "лимит на слой" : "полный набор"} />
         <Stat label="Общая площадь" value={`${totalArea.toFixed(0)} га`} />
         <Stat label="Среднее P" value={avgP ? `${avgP.toFixed(1)} мг/кг` : "—"} sub={`норма ≥ ${SOIL_REQUIREMENTS.phosphorusMgKgMin}`} accent={avgP && avgP < SOIL_REQUIREMENTS.phosphorusMgKgMin ? "warn" : "ok"} />

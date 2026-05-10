@@ -18,15 +18,17 @@ function NavLink({ href, label, icon, active }: { href: string; label: string; i
   return (
     <Link
       href={href}
+      title={label}
+      aria-label={label}
       className={[
-        "relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition",
+        "relative inline-flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-full text-[13px] font-medium transition shrink-0",
         active
           ? "bg-emerald-700 text-white shadow-soft hover:bg-emerald-800"
           : "text-foreground-soft hover:text-foreground hover:bg-muted",
       ].join(" ")}
     >
       {icon}
-      <span>{label}</span>
+      <span className="hidden lg:inline">{label}</span>
     </Link>
   );
 }
@@ -58,10 +60,10 @@ function NavInner() {
   const asQuery = as ? `?as=${as}` : "";
 
   return (
-    <div className="ml-auto flex items-center gap-3">
+    <div className="ml-auto flex items-center gap-2 sm:gap-3 min-w-0">
       {role === "inspector" && (
         <>
-          <nav className="flex items-center gap-0.5">
+          <nav className="flex items-center gap-0.5 overflow-x-auto no-scrollbar -mx-1 px-1 max-w-full">
             <NavLink href="/inspector" label="Главная" icon={<IconChart size={14} />} active={path === "/inspector"} />
             <NavLink href="/inspector/crops" label="Поля и урожай" icon={<IconSprout size={14} />} active={path.startsWith("/inspector/crops")} />
             <NavLink href="/inspector/livestock" label="Скот" icon={<IconShield size={14} />} active={path.startsWith("/inspector/livestock")} />
@@ -70,12 +72,12 @@ function NavInner() {
             <NavLink href="/inspector/sources" label="Откуда данные" icon={<IconLink size={14} />} active={path.startsWith("/inspector/sources")} />
           </nav>
           <RolePill role="inspector" />
-          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить роль ↗</Link>
+          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline shrink-0">сменить роль ↗</Link>
         </>
       )}
       {role === "farmer" && (
         <>
-          <nav className="flex items-center gap-0.5">
+          <nav className="flex items-center gap-0.5 overflow-x-auto no-scrollbar -mx-1 px-1 max-w-full">
             <NavLink href={`/farmer${asQuery}`} label="Главная" icon={<IconChart size={14} />} active={path === "/farmer"} />
             <NavLink href={`/farmer/passport${asQuery}`} label="Мои поля" icon={<IconLayers size={14} />} active={path.startsWith("/farmer/passport")} />
             <NavLink href={`/farmer/calculator${asQuery}`} label="Калькулятор" icon={<IconCalculator size={14} />} active={path.startsWith("/farmer/calculator")} />
@@ -83,22 +85,22 @@ function NavInner() {
             <NavLink href={`/farmer/applications${asQuery}`} label="Заявки" icon={<IconFile size={14} />} active={path.startsWith("/farmer/applications")} />
           </nav>
           <RolePill role="farmer" />
-          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline">сменить роль ↗</Link>
+          <Link href="/" className="text-xs text-foreground-soft hover:text-foreground hidden sm:inline shrink-0">сменить роль ↗</Link>
         </>
       )}
       {role === "neutral" && (
         <nav className="flex items-center gap-2 text-sm">
           <Link
             href="/inspector"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border-soft bg-card hover:border-rose-300 hover:text-rose-700 transition text-[13px]"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border border-border-soft bg-card hover:border-rose-300 hover:text-rose-700 transition text-[13px]"
           >
-            <IconShield size={14} /> Я инспектор
+            <IconShield size={14} /> <span className="hidden sm:inline">Я инспектор</span><span className="sm:hidden">Инспектор</span>
           </Link>
           <Link
             href="/farmer"
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full gradient-accent text-accent-fg shadow-soft hover:shadow-pop transition text-[13px] font-medium"
+            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-full gradient-accent text-accent-fg shadow-soft hover:shadow-pop transition text-[13px] font-medium"
           >
-            <IconSprout size={14} /> Я фермер
+            <IconSprout size={14} /> <span className="hidden sm:inline">Я фермер</span><span className="sm:hidden">Фермер</span>
           </Link>
         </nav>
       )}

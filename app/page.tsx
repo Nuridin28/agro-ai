@@ -7,33 +7,33 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="space-y-20 max-w-6xl mx-auto -mt-2">
+    <div className="space-y-12 sm:space-y-20 max-w-6xl mx-auto -mt-2">
       {/* HERO */}
-      <section className="relative overflow-hidden rounded-[28px] border border-border-soft bg-hero shadow-card animate-fade-up">
+      <section className="relative overflow-hidden rounded-2xl sm:rounded-[28px] border border-border-soft bg-hero shadow-card animate-fade-up">
         <div className="absolute inset-0 bg-grid opacity-[0.35] pointer-events-none" />
         <div className="absolute -top-32 -right-24 w-105 h-105 rounded-full gradient-accent opacity-25 blur-3xl pointer-events-none animate-float" />
         <div className="absolute -bottom-40 -left-20 w-90 h-90 rounded-full bg-lime-300 opacity-25 blur-3xl pointer-events-none" />
 
-        <div className="relative grid lg:grid-cols-12 gap-10 px-6 sm:px-10 py-14 sm:py-20 items-center">
+        <div className="relative grid lg:grid-cols-12 gap-8 sm:gap-10 px-5 sm:px-10 py-10 sm:py-14 lg:py-20 items-center">
           <div className="lg:col-span-7">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card/80 border border-border-soft text-[11px] uppercase tracking-wider text-foreground-soft shadow-soft backdrop-blur">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               <IconSparkle size={12} className="text-emerald-600" />
               AltynDala · демо
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-[60px] font-bold tracking-tight mt-5 leading-[1.02]">
+            <h1 className="text-3xl sm:text-5xl lg:text-[60px] font-bold tracking-tight mt-4 sm:mt-5 leading-[1.05] sm:leading-[1.02]">
               <span className="text-gradient-accent">Помогаем</span>
               <br />
               получать субсидии
               <br />
-              <span className="text-foreground-soft text-3xl sm:text-4xl lg:text-5xl">честно и без проверок</span>
+              <span className="text-foreground-soft text-2xl sm:text-4xl lg:text-5xl">честно и без проверок</span>
             </h1>
-            <p className="text-base sm:text-lg text-foreground-soft mt-6 max-w-xl leading-relaxed">
+            <p className="text-sm sm:text-lg text-foreground-soft mt-5 sm:mt-6 max-w-xl leading-relaxed">
               Собираем в одном месте всё про вашу землю, скот, погоду и заявки.
               Фермеру — подсказки и спокойствие. Инспектору — понятный разбор каждой выплаты.
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-3">
               <Link href="/farmer" className="btn btn-primary">
                 <IconSprout size={16} />
                 Я фермер
@@ -45,7 +45,7 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            <div className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border-soft bg-border-soft max-w-md">
+            <div className="mt-8 sm:mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border-soft bg-border-soft max-w-md">
               <HeroStat icon={<IconBuildingMini />} label="фермеров в демо" value={FARMERS.length} />
               <HeroStat icon={<IconLink size={14} />} label="госбаз" value={9} />
               <HeroStat icon={<IconChart size={14} />} label="проверок" value={14} />
@@ -164,7 +164,7 @@ export default function LandingPage() {
       </section>
 
       {/* DEMO ENTRIES */}
-      <section className="rounded-3xl border border-border-soft bg-card p-6 sm:p-8 shadow-soft animate-fade-up animate-delay-3">
+      <section className="rounded-2xl sm:rounded-3xl border border-border-soft bg-card p-5 sm:p-8 shadow-soft animate-fade-up animate-delay-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-foreground-soft">
@@ -267,7 +267,7 @@ function RoleCard({
   return (
     <Link
       href={href}
-      className={`group relative block rounded-3xl border border-border-soft bg-card p-7 shadow-soft hover:shadow-card ${hoverBorder} transition animate-fade-up ${delayCls}`}
+      className={`group relative block rounded-2xl sm:rounded-3xl border border-border-soft bg-card p-5 sm:p-7 shadow-soft hover:shadow-card ${hoverBorder} transition animate-fade-up ${delayCls}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">

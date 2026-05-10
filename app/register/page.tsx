@@ -215,10 +215,10 @@ export default function RegisterPage() {
   const cacheHit = cacheRef.current.has(farmName.trim().toLowerCase()) && farmName.trim().length >= 3;
 
   return (
-    <div className="max-w-3xl mx-auto py-8">
-      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-7">
+    <div className="max-w-3xl mx-auto py-6 sm:py-8">
+      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-5 sm:p-7">
         <div className="text-xs uppercase tracking-wider text-foreground-soft">Регистрация фермера</div>
-        <h1 className="text-2xl font-bold tracking-tight mt-1">Привязка к Гипрозему</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-1">Привязка к Гипрозему</h1>
         <p className="text-sm text-foreground-soft mt-1">Введите название хозяйства — мы найдём ваши участки в реальном Гипрозем-API и привяжем их к аккаунту.</p>
 
         <Stepper step={step} />
@@ -404,13 +404,13 @@ function Stepper({ step }: { step: Step }) {
   const labels: Record<Step, string> = { credentials: "Данные", lookup: "Поиск", select: "Выбор", confirm: "Готово" };
   const idx = order.indexOf(step);
   return (
-    <div className="mt-5 flex items-center gap-2">
+    <div className="mt-5 flex items-center gap-2 flex-wrap">
       {order.map((s, i) => (
         <div key={s} className="flex items-center gap-2">
-          <span className={`text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${i <= idx ? "bg-accent text-accent-fg border-accent" : "bg-muted border-border text-foreground/60"}`}>
+          <span className={`text-[10.5px] sm:text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full border ${i <= idx ? "bg-accent text-accent-fg border-accent" : "bg-muted border-border text-foreground/60"}`}>
             {i + 1}. {labels[s]}
           </span>
-          {i < order.length - 1 && <span className="text-foreground/30">·</span>}
+          {i < order.length - 1 && <span className="text-foreground/30 hidden sm:inline">·</span>}
         </div>
       ))}
     </div>

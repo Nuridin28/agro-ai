@@ -2,6 +2,13 @@ import type { SourceRef } from "../sources";
 
 export type Severity = "ok" | "info" | "warn" | "high" | "critical";
 
+// Сколько баллов каждая severity добавляет к riskScore. Сумма по всем
+// findings капается в 100 (см. verify/index.ts) и используется
+// decisionFromRisk() с порогами 15 / 35 / 65.
+export const SEVERITY_WEIGHT: Record<Severity, number> = {
+  ok: 0, info: 5, warn: 15, high: 35, critical: 60,
+};
+
 export type CheckCode =
   // Земледелие
   | "CROP_BIOLOGICAL_CEILING"      // заявлено выше биологического потенциала

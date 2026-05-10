@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 type Mode = "inspector_summary" | "farmer_chat" | "inspector_portfolio" | "meteo_advisor";
 
@@ -103,10 +103,124 @@ export function AiInsight({ farmerId, mode, coords, year, buttonLabel, descripti
       )}
 
       {text && (
-        <div className="mt-4 prose prose-sm max-w-none border border-violet-200 rounded-xl bg-violet-50/40 p-4 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-          {text}
+        <div className="mt-4 max-w-none border border-violet-200 rounded-xl bg-violet-50/40 p-4 text-sm leading-relaxed text-foreground/90">
+          <Markdown source={text} />
         </div>
       )}
     </div>
   );
+}
+
+function renderInline(line: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const regex = /\*\*([^*]+)\*\*|`([^`]+)`/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let i = 0;
+  while ((match = regex.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(line.slice(lastIndex, match.index));
+    }
+    if (match[1] !== undefined) {
+      nodes.push(
+        <strong key={`${keyPrefix}-b-${i}`} className="font-semibold text-foreground">
+          {match[1]}
+        </strong>
+      );
+    } else if (match[2] !== undefined) {
+      nodes.push(
+        <code key={`${keyPrefix}-c-${i}`} className="px-1 py-0.5 rounded bg-violet-100 text-violet-900 text-[0.85em]">
+          {match[2]}
+        </code>
+      );
+    }
+    lastIndex = match.index + match[0].length;
+    i += 1;
+  }
+  if (lastIndex < line.length) {
+    nodes.push(line.slice(lastIndex));
+  }
+  return nodes;
+}
+
+function Markdown({ source }: { source: string }) {
+  const lines = source.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let listBuffer: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let key = 0;
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    const items = listBuffer;
+    listBuffer = [];
+    blocks.push(
+      <ul key={`ul-${key++}`} className="my-2 ml-1 space-y-1.5 list-none">
+        {items.map((item, idx) => (
+          <li key={idx} className="relative pl-5">
+            <span className="absolute left-0 top-2 w-1.5 h-1.5 rounded-full bg-violet-500" />
+            {renderInline(item, `li-${idx}`)}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  const flushParagraph = () => {
+    if (paragraphBuffer.length === 0) return;
+    const joined = paragraphBuffer.join(" ");
+    paragraphBuffer = [];
+    blocks.push(
+      <p key={`p-${key++}`} className="my-2 text-foreground/85">
+        {renderInline(joined, `p-${key}`)}
+      </p>
+    );
+  };
+
+  const flushAll = () => {
+    flushList();
+    flushParagraph();
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    const trimmed = line.trim();
+
+    if (trimmed === "") {
+      flushAll();
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+    if (heading) {
+      flushAll();
+      const level = heading[1].length;
+      const content = heading[2];
+      const cls =
+        level === 1 ? "text-base font-semibold tracking-tight mt-1 mb-2 text-foreground" :
+        level === 2 ? "text-[15px] font-semibold tracking-tight mt-3 mb-1.5 text-foreground" :
+        "text-sm font-semibold mt-2.5 mb-1 text-violet-900";
+      const Tag = (level === 1 ? "h3" : level === 2 ? "h4" : "h5") as "h3" | "h4" | "h5";
+      blocks.push(
+        <Tag key={`h-${key++}`} className={cls}>
+          {renderInline(content, `h-${key}`)}
+        </Tag>
+      );
+      continue;
+    }
+
+    const listItem = /^[-*]\s+(.*)$/.exec(trimmed);
+    if (listItem) {
+      flushParagraph();
+      listBuffer.push(listItem[1]);
+      continue;
+    }
+
+    flushList();
+    paragraphBuffer.push(trimmed);
+  }
+
+  flushAll();
+
+  return <div className="space-y-0.5">{blocks}</div>;
 }

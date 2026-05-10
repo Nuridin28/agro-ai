@@ -37,14 +37,14 @@ export default function CropsPage() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight">Модуль «Земледелие»</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Модуль «Земледелие»</h1>
         <p className="text-sm text-foreground/70 mt-1 max-w-3xl">
           Сезон 2024 года. Эталон — биологическая норма по культуре (БНС/КазНИИЗиР), скорректированная на бонитет (Гипрозем),
           влагозарядку (Казгидромет: снежный покров, прогрев почвы) и агрохимию (P, Cu, гумус). Заявленный сбор сравнивается с расчётным потолком.
         </p>
       </section>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Хозяйств" value={rows.length} />
         <Stat label="Общая площадь" value={`${totalArea.toLocaleString("ru-KZ")} га`} />
         <Stat label="Субсидии" value={formatTenge(totalSubsidy)} />

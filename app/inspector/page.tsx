@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FARMERS, findFarmer } from "@/lib/mock/farmers";
 import { verifyFarmer } from "@/lib/verify";
-import { Card, CardHeader, CategoryBadge, DecisionBadge, FarmerLink, SeverityBadge, Stat, formatTenge } from "@/components/ui";
+import { Card, CardHeader, CategoryBadge, DecisionBadge, FarmerLink, RiskScoreBar, SeverityBadge, Stat, formatTenge } from "@/components/ui";
 import { AiInsight } from "@/components/AiInsight";
 import { buildFarmerApplications, breakdownByCategory, SUBSIDY_CATEGORY_GROUP } from "@/lib/subsidies";
 import { getAllStoredApplications } from "@/lib/applications-store";
@@ -48,7 +48,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-3xl border border-border-soft bg-card shadow-soft p-6 sm:p-8">
+      <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border-soft bg-card shadow-soft p-5 sm:p-8">
         <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-rose-300 opacity-15 blur-3xl pointer-events-none" />
         <div className="absolute inset-0 bg-dots opacity-40 pointer-events-none" />
         <div className="relative">
@@ -56,7 +56,7 @@ export default async function DashboardPage() {
             <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
             Данные взяты как будто из госбаз
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight mt-3 leading-tight">
+          <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight mt-3 leading-tight">
             Проверка субсидий <span className="text-gradient-accent">фермеров Казахстана</span>
           </h1>
           <p className="text-sm sm:text-base text-foreground-soft mt-2.5 max-w-3xl leading-relaxed">
@@ -66,7 +66,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <Stat icon={<IconBuilding size={14} />} label="Всего хозяйств" value={FARMERS.length} sub="источник: Qoldau" />
         <Stat icon={<IconCoin size={14} />} label="Сумма субсидий" value={formatTenge(totalSubsidy)} sub="за 2024 год" />
         <Stat icon={<IconAlert size={14} />} label="Нужно вернуть" value={formatTenge(totalRisk)} sub="по оценке ИИ" accent={totalRisk > 0 ? "high" : "ok"} />
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
                 <th className="px-3 py-2.5 font-medium text-right">Получено</th>
                 <th className="px-3 py-2.5 font-medium text-right">Под вопросом ₸</th>
                 <th className="px-3 py-2.5 font-medium">Нарушения</th>
-                <th className="px-3 py-2.5 font-medium">Оценка</th>
+                <th className="px-3 py-2.5 font-medium">Риск-балл</th>
                 <th className="px-3 py-2.5 font-medium">Решение</th>
               </tr>
             </thead>
@@ -221,7 +221,7 @@ export default async function DashboardPage() {
                       )}
                     </td>
                     <td className="px-3 py-3.5 align-top">
-                      <EffBar value={verdict.efficiencyScore} />
+                      <RiskScoreBar value={verdict.riskScore} />
                     </td>
                     <td className="px-3 py-3.5 align-top"><DecisionBadge d={verdict.decision} /></td>
                   </tr>
@@ -289,18 +289,6 @@ function RiskShareBar({ share }: { share: number }) {
         <div className={`h-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs tabular-nums w-10 text-foreground/70">{pct}%</span>
-    </div>
-  );
-}
-
-function EffBar({ value }: { value: number }) {
-  const color = value >= 75 ? "bg-emerald-500" : value >= 45 ? "bg-amber-500" : "bg-rose-500";
-  return (
-    <div className="flex items-center gap-2 min-w-30">
-      <div className="w-16 h-1.5 rounded bg-muted overflow-hidden">
-        <div className={`h-full ${color}`} style={{ width: `${Math.max(2, value)}%` }} />
-      </div>
-      <span className="text-xs tabular-nums w-8">{value}</span>
     </div>
   );
 }

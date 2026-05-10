@@ -37,11 +37,11 @@ export default async function PassportPage({ searchParams }: { searchParams: Pro
     const userFields = session.user.fields;
     return (
       <div className="space-y-6">
-        <Card className="p-5">
+        <Card className="p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               <div className="text-xs uppercase tracking-wider text-foreground/60">Цифровой паспорт · ваши хозяйства из Гипрозема</div>
-              <h1 className="text-xl font-bold tracking-tight mt-1">{farmer.legalName}</h1>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmer.legalName}</h1>
               <div className="text-sm text-foreground/70 mt-0.5">{userFields.length} привязок · {userFields.reduce((s, f) => s + f.parcels, 0)} участков</div>
             </div>
             <LogoutButton />
@@ -81,11 +81,11 @@ export default async function PassportPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-foreground/60">Цифровой паспорт участка · демо</div>
-            <h1 className="text-xl font-bold tracking-tight mt-1">{farmer.legalName}</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmer.legalName}</h1>
             <div className="text-sm text-foreground/70 mt-0.5">{farmer.region.oblast}, {farmer.region.rayon}</div>
           </div>
           <FarmerSwitcher activeId={farmer.id} />
@@ -104,7 +104,7 @@ export default async function PassportPage({ searchParams }: { searchParams: Pro
               subtitle={`${field.areaHa.toLocaleString("ru-KZ")} га · балл бонитета ${field.bonitet} · ${field.region.rayon}`}
               action={<SourcePill source={field.source} />}
             />
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 p-4 sm:p-5">
               <Param label="Гумус"    value={`${field.humusPct} %`} okIf={field.humusPct >= SOIL_REQUIREMENTS.humusPctMin} />
               <Param label="Фосфор P" value={`${field.phosphorusMgKg} мг/кг`} okIf={field.phosphorusMgKg >= SOIL_REQUIREMENTS.phosphorusMgKgMin} />
               <Param label="Калий K"  value={`${field.potassiumMgKg} мг/кг`} okIf={field.potassiumMgKg >= SOIL_REQUIREMENTS.potassiumMgKgMin} />
