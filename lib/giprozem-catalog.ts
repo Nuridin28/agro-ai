@@ -246,16 +246,3 @@ export function intersectingLayersCount(west: number, south: number, east: numbe
   }
   return n;
 }
-
-export function oblastBbox(code: string): [number, number, number, number] {
-  const ls = layersByOblast(code);
-  if (ls.length === 0) return [46, 40, 88, 56];
-  let w = 180, s = 90, e = -180, n = -90;
-  for (const l of ls) {
-    if (l.bbox[0] < w) w = l.bbox[0];
-    if (l.bbox[1] < s) s = l.bbox[1];
-    if (l.bbox[2] > e) e = l.bbox[2];
-    if (l.bbox[3] > n) n = l.bbox[3];
-  }
-  return [w, s, e, n];
-}

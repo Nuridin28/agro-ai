@@ -225,15 +225,15 @@ export default function RegisterPage() {
 
         {step === "credentials" && (
           <form
-            onSubmit={(e) => { e.preventDefault(); if (email && password.length >= 6 && farmName.length >= 3) goToLookup(); }}
+            onSubmit={(e) => { e.preventDefault(); if (email && password.length >= 8 && farmName.length >= 3) goToLookup(); }}
             className="mt-6 grid sm:grid-cols-2 gap-4"
           >
             <Field label="Email *">
               <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-border rounded px-3 py-2 bg-card text-sm" />
             </Field>
-            <Field label="Пароль (мин. 6 символов) *">
-              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+            <Field label="Пароль (мин. 8 символов) *">
+              <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)}
                 className="w-full border border-border rounded px-3 py-2 bg-card text-sm" />
             </Field>
 
@@ -294,7 +294,7 @@ export default function RegisterPage() {
             </Field>
             <div className="sm:col-span-2 flex justify-end mt-2">
               <button type="submit"
-                disabled={!email || password.length < 6 || farmName.length < 3}
+                disabled={!email || password.length < 8 || farmName.length < 3}
                 className="px-4 py-2 rounded gradient-accent text-accent-fg font-medium disabled:opacity-50">
                 {cacheHit ? "Далее: подтвердить участки →" : "Далее: найти в Гипрозем →"}
               </button>
