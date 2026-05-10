@@ -46,14 +46,14 @@ export default function LivestockPage() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight">Модуль «Животноводство»</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Модуль «Животноводство»</h1>
         <p className="text-sm text-foreground/70 mt-1 max-w-3xl">
           Сопоставление паспортов животных (ИСЖ), племенных свидетельств (Plem.kz), журналов вакцинации (VETIS), нагрузки на пастбище (Гипрозем),
           объёмов закупа кормов (Qoldau) и метеоусловий (Казгидромет). Биологические потолки взяты из ИАС/Plem.kz.
         </p>
       </section>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Хозяйств" value={rows.length} />
         <Stat label="Поголовье" value={`${totalHeads.toLocaleString("ru-KZ")} гол.`} />
         <Stat label="Субсидии" value={formatTenge(totalSubsidy)} />

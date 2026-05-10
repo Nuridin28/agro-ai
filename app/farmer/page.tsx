@@ -58,17 +58,17 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
 
   return (
     <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-border-soft bg-card shadow-soft">
+      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border-soft bg-card shadow-soft">
         <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full gradient-accent opacity-12 blur-3xl pointer-events-none animate-float" />
         <div className="absolute -bottom-32 -left-16 w-72 h-72 rounded-full bg-lime-300 opacity-10 blur-3xl pointer-events-none" />
         <div className="absolute inset-0 bg-grid opacity-30 pointer-events-none" />
-        <div className="relative p-6 sm:p-8">
+        <div className="relative p-5 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <div className="text-[11px] uppercase tracking-wider text-foreground-soft font-medium">
                 {isReal ? "Ваш кабинет" : "Кабинет фермера · демо"}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1.5">{farmer.legalName}</h1>
+              <h1 className="text-xl sm:text-3xl font-bold tracking-tight mt-1.5 wrap-break-word">{farmer.legalName}</h1>
               <div className="text-sm text-foreground-soft mt-1">
                 {farmer.ownerFio} {farmer.bin && farmer.bin !== "—" && <>· БИН/ИИН <span className="font-mono text-foreground/80">{farmer.bin}</span></>}
               </div>
@@ -104,7 +104,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
       </div>
 
       {!isReal && verdict && (
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <Stat icon={<IconCoin size={14} />} label="Получено субсидий" value={formatTenge(verdict.totalSubsidyTenge)} sub={`за ${season?.year ?? herd?.year ?? "—"} год`} />
           <Stat icon={<IconChart size={14} />} label="Оценка работы" value={`${efficiency}/100`} accent={zone === "green" ? "ok" : zone === "amber" ? "warn" : "high"} />
           <Stat
@@ -124,7 +124,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
       )}
 
       {isReal && userFields.length > 0 && (
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <Stat icon={<IconBuilding size={14} />} label="Хозяйств" value={userFields.length} />
           <Stat icon={<IconLayers size={14} />} label="Полей" value={userFields.reduce((s, f) => s + f.parcels, 0)} />
           <Stat
@@ -153,7 +153,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
         />
       )}
 
-      <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <ModuleTile href={`/farmer/passport${q}`} icon={<IconMap size={18} />} title="Мои поля" desc="Состав почвы, какой урожай ждать, что подсевать" />
         <ModuleTile href={`/farmer/calculator${q}`} icon={<IconCalculator size={18} />} title="Калькулятор" desc="Сколько удобрений купить и сколько денег получить" />
         <ModuleTile href={`/farmer/meteo${q}`} icon={<IconCloud size={18} />} title="Погода" desc="Прогноз и риски на сезон" />
@@ -267,14 +267,14 @@ function ModuleTile({ href, title, desc, icon }: { href: string; title: string; 
   return (
     <Link
       href={href}
-      className="group block bg-card border border-border-soft rounded-2xl p-5 shadow-soft lift hover:border-accent/50"
+      className="group block bg-card border border-border-soft rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-soft lift hover:border-accent/50"
     >
-      <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center group-hover:gradient-accent group-hover:text-white transition">
+      <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 text-emerald-700 grid place-items-center group-hover:gradient-accent group-hover:text-white transition">
         {icon}
       </div>
-      <div className="text-sm font-semibold tracking-tight mt-4">{title}</div>
+      <div className="text-sm font-semibold tracking-tight mt-3 sm:mt-4">{title}</div>
       <div className="text-xs text-foreground-soft mt-1.5 leading-relaxed">{desc}</div>
-      <div className="text-xs font-medium text-emerald-700 mt-4 inline-flex items-center gap-1">
+      <div className="text-xs font-medium text-emerald-700 mt-3 sm:mt-4 inline-flex items-center gap-1">
         Открыть <IconArrowRight size={12} className="transition group-hover:translate-x-0.5" />
       </div>
     </Link>

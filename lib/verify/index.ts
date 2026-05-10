@@ -1,5 +1,6 @@
 import type { Farmer } from "../types";
-import type { FarmerVerdict, Finding, Severity } from "./types";
+import type { FarmerVerdict, Finding } from "./types";
+import { SEVERITY_WEIGHT } from "./types";
 import { runCropChecks, computeExpectedYield } from "./crop";
 import { runLivestockChecks } from "./livestock";
 import { runSatelliteChecks } from "./satellite";
@@ -10,9 +11,7 @@ import { herdFor, pastureFor, bullsFor, saleDeclarationFor } from "../mock/lives
 import { polygonForFarmer } from "../mock/field-polygons";
 import { verifySatellite, checkInactivity } from "../satellite";
 
-export const SEVERITY_WEIGHT: Record<Severity, number> = {
-  ok: 0, info: 5, warn: 15, high: 35, critical: 60,
-};
+export { SEVERITY_WEIGHT };
 
 export function decisionFromRisk(score: number): "clear" | "review" | "audit" | "recovery" {
   if (score < 15) return "clear";

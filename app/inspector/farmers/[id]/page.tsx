@@ -9,7 +9,7 @@ import { CROP_LABEL, BREED_LABEL } from "@/lib/types";
 import { CROP_NORMS, BREED_NORMS } from "@/lib/norms";
 import { computeExpectedYield } from "@/lib/verify/crop";
 import { verifyFarmer } from "@/lib/verify";
-import { Card, CardHeader, CategoryBadge, DecisionBadge, SourcePill, formatTenge } from "@/components/ui";
+import { Card, CardHeader, CategoryBadge, DecisionBadge, RiskScoreCard, SourcePill, formatTenge } from "@/components/ui";
 import { FindingCard } from "@/components/FindingCard";
 import { AiInsight } from "@/components/AiInsight";
 import { SatelliteSection } from "@/components/SatelliteSection";
@@ -84,11 +84,11 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
         <Link className="hover:underline" href="/inspector">Дашборд</Link> / <span>{farmer.legalName}</span>
       </nav>
 
-      <Card className="p-6">
-        <div className="flex flex-wrap items-start gap-4 justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{farmer.legalName}</h1>
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-col md:flex-row md:flex-wrap md:items-start gap-4 md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight wrap-break-word">{farmer.legalName}</h1>
               <DecisionBadge d={verdict.decision} />
             </div>
             <div className="text-sm text-foreground/70 mt-1">
@@ -106,10 +106,10 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
               >Проверить в Giprozem live →</a>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3 min-w-72">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full md:w-auto md:min-w-80">
             <Mini label="Субсидии" value={formatTenge(verdict.totalSubsidyTenge)} />
             <Mini label="Риск ₸" value={verdict.totalRiskTenge > 0 ? formatTenge(verdict.totalRiskTenge) : "—"} accent={verdict.totalRiskTenge > 0 ? "high" : undefined} />
-            <Mini label="Эффективность" value={`${verdict.efficiencyScore}/100`} />
+            <RiskScoreCard value={verdict.riskScore} />
           </div>
         </div>
       </Card>
@@ -374,11 +374,11 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
         <Link className="hover:underline" href="/inspector">Дашборд</Link> / <span>{user.farmName}</span>
       </nav>
 
-      <Card className="p-6">
-        <div className="flex flex-wrap items-start gap-4 justify-between">
-          <div>
+      <Card className="p-5 sm:p-6">
+        <div className="flex flex-col md:flex-row md:flex-wrap md:items-start gap-4 md:justify-between">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight">{user.farmName}</h1>
+              <h1 className="text-lg sm:text-2xl font-bold tracking-tight wrap-break-word">{user.farmName}</h1>
               <span className="text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-md border bg-sky-100 text-sky-900 border-sky-300">
                 САМОРЕГИСТРАЦИЯ
               </span>
@@ -392,7 +392,7 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
             </div>
             <div className="text-xs text-foreground/55 mt-1.5 font-mono">{farmerId}</div>
           </div>
-          <div className="grid grid-cols-2 gap-3 min-w-64">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full md:w-auto md:min-w-64">
             <Mini label="Привязок Гипрозема" value={user.fields.length} />
             <Mini label="Подано на сумму" value={formatTenge(totalRequested)} />
           </div>

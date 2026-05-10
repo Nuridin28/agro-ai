@@ -32,10 +32,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="max-w-md mx-auto py-10">
-      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-7">
+    <div className="max-w-md mx-auto py-6 sm:py-10">
+      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-5 sm:p-7">
         <div className="text-xs uppercase tracking-wider text-foreground-soft">Личный кабинет фермера</div>
-        <h1 className="text-2xl font-bold tracking-tight mt-1">Вход</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight mt-1">Вход</h1>
         <p className="text-sm text-foreground-soft mt-1">Войдите, чтобы видеть только свои данные.</p>
 
         <form onSubmit={submit} className="mt-6 space-y-4">

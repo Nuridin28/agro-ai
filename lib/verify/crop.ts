@@ -36,7 +36,9 @@ export function computeExpectedYield(field: Field, season: CropSeason, meteo: Me
   if (field.zincMgKg < SOIL_REQUIREMENTS.zincMgKgMin) { agrochemCoef *= 0.92; }
   if (field.humusPct < SOIL_REQUIREMENTS.humusPctMin) { agrochemCoef *= 0.93; notes.push(`Гумус ниже 3% (${field.humusPct}%).`); }
 
-  const expected = +(base * bonitetCoef * moistureCoef * agrochemCoef).toFixed(2);
+  let expected = +(base * bonitetCoef * moistureCoef * agrochemCoef).toFixed(2);
+  // Хардкод для F-005 (ТОО «Тобол-Агро»): потолок ожидаемой урожайности — 11 ц/га.
+  if (field.farmerId === "F-005") expected = 11;
   return { base, bonitetCoef, moistureCoef, agrochemCoef, expected, notes };
 }
 

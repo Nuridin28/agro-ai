@@ -155,11 +155,11 @@ export default async function MeteoPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-foreground/60">Метео-ассистент · live · open-meteo.com</div>
-            <h1 className="text-xl font-bold tracking-tight mt-1">{farmer.legalName}</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmer.legalName}</h1>
             <div className="text-sm text-foreground/70 mt-0.5">
               {isReal
                 ? `${session.user.fields.length} привязок Гипрозема · погода тянется по центру каждого района`
@@ -217,7 +217,7 @@ function LocationBlock({ loc, meteo, error, showHeader }: { loc: FieldLocation; 
 
       <Card>
         <CardHeader title="Сейчас в районе" subtitle={`Обновлено ${new Date(c.time).toLocaleString("ru-KZ")} (open-meteo.com)`} />
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 p-4 sm:p-5">
           <Stat label="Температура воздуха" value={c.temperatureC != null ? `${c.temperatureC.toFixed(1)} °C` : "—"} sub={decodeWeatherCode(c.weatherCode ?? null)} />
           <Stat label="Снежный покров" value={c.snowDepthCm != null ? `${c.snowDepthCm.toFixed(1)} см` : "—"} />
           <Stat label="Осадки" value={c.precipitationMm != null ? `${c.precipitationMm.toFixed(1)} мм/ч` : "—"} />
@@ -229,7 +229,7 @@ function LocationBlock({ loc, meteo, error, showHeader }: { loc: FieldLocation; 
       {s && (
         <Card>
           <CardHeader title={`Зимний и вегетационный сезон ${s.year - 1}–${s.year}`} subtitle="Историческая выборка ERA5 reanalysis (Copernicus / Open-Meteo)" />
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 p-4 sm:p-5">
             <Stat label="Снежный экв. (мм)" value={`${s.snowWaterEquivMm}`} sub={`всего ${s.totalWinterSnowfallCm.toFixed(0)} см снегопадов`} accent={s.snowWaterEquivMm < 130 ? "warn" : "ok"} />
             <Stat label="Сход снега" value={s.snowMeltDate ?? "—"} />
             <Stat label="Прогрев почвы" value={s.soilWarmDate ?? "—"} sub="до +8°C на 28-100см" />

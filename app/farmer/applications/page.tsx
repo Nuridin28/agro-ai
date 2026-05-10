@@ -44,18 +44,18 @@ export default async function ApplicationsPage({ searchParams }: { searchParams:
 
   return (
     <div className="space-y-6">
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-foreground/60">Цифровая подача заявок · Qoldau / gosagro</div>
-            <h1 className="text-xl font-bold tracking-tight mt-1">{farmer.legalName}</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmer.legalName}</h1>
             <div className="text-sm text-foreground/70 mt-0.5">БИН/ИИН <span className="font-mono">{farmer.bin}</span></div>
           </div>
           {isReal ? <LogoutButton /> : <FarmerSwitcher activeId={farmer.id} />}
         </div>
       </Card>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Заявок всего" value={apps.length} />
         <Stat label="На рассмотрении" value={review} accent={review > 0 ? "warn" : "ok"} />
         <Stat label="Запрошено" value={formatTenge(total)} />

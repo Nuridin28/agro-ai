@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { SOURCES, type SourceRef, describeSource } from "@/lib/sources";
-import type { Severity } from "@/lib/verify/types";
+import { SEVERITY_WEIGHT, type Severity } from "@/lib/verify/types";
 import { SUBSIDY_CATEGORY_LABEL, SUBSIDY_CATEGORY_BADGE, type SubsidyCategory } from "@/lib/subsidy-categories";
+
+export { SEVERITY_WEIGHT };
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
   ok: "норма", info: "инфо", warn: "внимание", high: "риск", critical: "критично",
@@ -38,6 +40,65 @@ export function DecisionBadge({ d }: { d: "clear" | "review" | "audit" | "recove
     </span>
   );
 }
+
+// Пороги соответствуют decisionFromRisk() в lib/verify/index.ts.
+// Меняешь здесь — поменяй и там, иначе цвета бара разойдутся с DecisionBadge.
+export const RISK_ZONES = [
+  { min: 0,  max: 15,  label: "чисто",    decision: "clear",    fill: "bg-emerald-500", faded: "bg-emerald-100", text: "text-emerald-700" },
+  { min: 15, max: 35,  label: "проверка", decision: "review",   fill: "bg-sky-500",     faded: "bg-sky-100",     text: "text-sky-700" },
+  { min: 35, max: 65,  label: "аудит",    decision: "audit",    fill: "bg-amber-500",   faded: "bg-amber-100",   text: "text-amber-700" },
+  { min: 65, max: 101, label: "возврат",  decision: "recovery", fill: "bg-rose-500",    faded: "bg-rose-100",    text: "text-rose-700" },
+] as const;
+
+export function riskZone(score: number) {
+  return RISK_ZONES.find((z) => score >= z.min && score < z.max) ?? RISK_ZONES[RISK_ZONES.length - 1];
+}
+
+// Размер каждой зоны на бар-шкале 0–100. Доли отражают пороги 15 / 35 / 65.
+const ZONE_WIDTHS = ["15%", "20%", "30%", "35%"] as const;
+
+function RiskBarTrack({ value, height }: { value: number; height: string }) {
+  const zone = riskZone(value);
+  const pct = Math.max(2, Math.min(100, value));
+  return (
+    <div className={`relative w-full ${height} rounded bg-muted overflow-hidden`}>
+      <div className="absolute inset-0 flex">
+        {RISK_ZONES.map((z, i) => (
+          <div key={z.label} className={z.faded} style={{ width: ZONE_WIDTHS[i] }} />
+        ))}
+      </div>
+      <div className={`relative h-full ${zone.fill} transition-[width]`} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+export function RiskScoreBar({ value }: { value: number }) {
+  const zone = riskZone(value);
+  return (
+    <div className="flex items-center gap-2 min-w-32">
+      <div className="w-20"><RiskBarTrack value={value} height="h-1.5" /></div>
+      <div className="flex items-baseline gap-0.5 leading-tight">
+        <span className={`text-xs font-bold tabular-nums ${zone.text}`}>{value}</span>
+        <span className="text-[10px] text-foreground/50">/100</span>
+      </div>
+    </div>
+  );
+}
+
+export function RiskScoreCard({ value }: { value: number }) {
+  const zone = riskZone(value);
+  return (
+    <div className="border border-border rounded-lg px-3 py-2 bg-muted/40">
+      <div className="text-[10px] uppercase tracking-wider text-foreground/60">Риск-балл</div>
+      <div className="flex items-baseline gap-1.5 mt-0.5">
+        <span className={`text-sm font-bold tabular-nums ${zone.text}`}>{value}</span>
+        <span className="text-[10px] text-foreground/50">/100 · {zone.label}</span>
+      </div>
+      <div className="mt-1.5"><RiskBarTrack value={value} height="h-1" /></div>
+    </div>
+  );
+}
+
 
 export function SourcePill({ source: r }: { source: SourceRef }) {
   const src = SOURCES[r.source];
@@ -78,12 +139,12 @@ export function Card({ children, className = "" }: { children: React.ReactNode; 
 
 export function CardHeader({ title, subtitle, action }: { title: React.ReactNode; subtitle?: React.ReactNode; action?: React.ReactNode }) {
   return (
-    <div className="px-5 py-4 border-b border-border-soft flex items-start justify-between gap-3">
-      <div>
-        <div className="text-base font-semibold tracking-tight">{title}</div>
+    <div className="px-4 sm:px-5 py-3 sm:py-4 border-b border-border-soft flex items-start justify-between gap-3 flex-wrap">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm sm:text-base font-semibold tracking-tight">{title}</div>
         {subtitle && <div className="text-xs text-foreground-soft mt-0.5">{subtitle}</div>}
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -111,13 +172,13 @@ export function Stat({
     accent === "high" ? "bg-rose-50 text-rose-700"       :
                         "bg-muted text-foreground-soft";
   return (
-    <div className={`relative overflow-hidden bg-card border border-border-soft rounded-2xl p-4 shadow-soft lift ${ringCls}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-[11px] uppercase tracking-wider text-foreground-soft">{label}</div>
-        {icon && <span className={`w-7 h-7 rounded-lg grid place-items-center ${iconCls}`}>{icon}</span>}
+    <div className={`relative overflow-hidden bg-card border border-border-soft rounded-xl sm:rounded-2xl p-3 sm:p-4 shadow-soft lift ${ringCls}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[10.5px] sm:text-[11px] uppercase tracking-wider text-foreground-soft leading-tight">{label}</div>
+        {icon && <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg grid place-items-center shrink-0 ${iconCls}`}>{icon}</span>}
       </div>
-      <div className={`text-2xl font-bold mt-1 tabular-nums ${accentCls}`}>{value}</div>
-      {sub && <div className="text-xs text-foreground-soft mt-1">{sub}</div>}
+      <div className={`text-lg sm:text-2xl font-bold mt-1 tabular-nums ${accentCls}`}>{value}</div>
+      {sub && <div className="text-[11px] sm:text-xs text-foreground-soft mt-1">{sub}</div>}
     </div>
   );
 }

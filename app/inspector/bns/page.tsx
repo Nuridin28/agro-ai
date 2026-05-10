@@ -101,9 +101,9 @@ export default function BnsExplorerPage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-6">
+      <div className="bg-card border border-border-soft rounded-2xl shadow-soft p-5 sm:p-6">
         <div className="text-xs uppercase tracking-wider text-foreground-soft">БНС · taldau.stat.gov.kz</div>
-        <h1 className="text-xl font-bold tracking-tight mt-1">Обозреватель статистики БНС</h1>
+        <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1">Обозреватель статистики БНС</h1>
         <p className="text-sm text-foreground-soft mt-1">
           Live-доступ к Taldau API: ищите показатель (урожайность, поголовье, веса), смотрите разбивку по областям и годам.
           Эти данные потом подключаются к движку верификации как «региональный эталон».

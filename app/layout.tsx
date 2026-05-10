@@ -26,24 +26,24 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="ru" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <header className="sticky top-0 z-40 border-b border-border-soft glass">
-          <div className="max-w-7xl mx-auto px-6 h-14 flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center gap-3 sm:gap-6">
+            <Link href="/" className="flex items-center gap-2 sm:gap-2.5 group shrink-0">
               <span className="w-8 h-8 rounded-xl gradient-accent text-accent-fg grid place-items-center font-bold text-sm shadow-soft group-hover:shadow-pop transition">A</span>
               <span className="flex flex-col leading-none">
                 <span className="font-semibold tracking-tight text-[15px]">AltynDala</span>
-                <span className="text-[10.5px] text-foreground-soft hidden sm:inline mt-0.5">Помощь фермерам и инспекторам по субсидиям</span>
+                <span className="text-[10.5px] text-foreground-soft hidden md:inline mt-0.5">Помощь фермерам и инспекторам по субсидиям</span>
               </span>
             </Link>
             <HeaderNav />
           </div>
         </header>
 
-        <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-10">{children}</main>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-6 sm:py-10">{children}</main>
 
-        <footer className="border-t border-border-soft mt-12 bg-background-elev/60">
-          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <footer className="border-t border-border-soft mt-8 sm:mt-12 bg-background-elev/60">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 py-5 sm:py-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
             <div className="text-xs text-foreground-soft">
-              <span className="font-medium text-foreground">Демо-версия</span> · данные взяты как будто из этих госбаз
+              <span className="font-medium text-foreground">Демо-версия</span> · данные взяты из этих госбаз
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {SOURCE_LINKS.map((s) => (

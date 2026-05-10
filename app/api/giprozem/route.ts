@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import {
-  queryGiprozem,
   buildNameQuery,
   buildPointQuery,
   buildLayerDumpQuery,
@@ -9,6 +8,7 @@ import {
   GIPROZEM_LAYER,
   GIPROZEM_LAYER_NAME,
 } from "@/lib/giprozem";
+import { queryGiprozemCached } from "@/lib/giprozem-cache";
 import { findLayer } from "@/lib/giprozem-catalog";
 
 // Серверный прокси к ArcGIS REST API Гипрозема — обход CORS, нормализация ответа.
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
       return Response.json({ error: "Pass ?layer= or ?q= or ?lat=&lng=" }, { status: 400 });
     }
 
-    const data = await queryGiprozem(params, layerId);
+    const data = await queryGiprozemCached(params, layerId);
     return Response.json({ ...data, layer: layerName, layerId }, {
       headers: { "Cache-Control": "public, max-age=300, s-maxage=86400" },
     });

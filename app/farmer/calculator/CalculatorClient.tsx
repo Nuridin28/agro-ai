@@ -83,11 +83,11 @@ export function CalculatorClient({ farmerName, isReal, prefill }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card className="p-5">
+      <Card className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-foreground/60">Калькулятор субсидий · pre-check</div>
-            <h1 className="text-xl font-bold tracking-tight mt-1">{farmerName}</h1>
+            <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmerName}</h1>
             <div className="text-sm text-foreground/70 mt-0.5">
               {prefill.hasFieldData
                 ? <>Поле {prefill.fieldCadastralNumber ?? "—"} · {prefill.fieldAreaHa ?? "—"} га · бонитет {prefill.fieldBonitet ?? "—"}</>
@@ -101,7 +101,7 @@ export function CalculatorClient({ farmerName, isReal, prefill }: Props) {
 
       <Card>
         <CardHeader title="Параметры" subtitle="Подставьте свои значения — система пересчитает потенциал и оптимальный закуп." />
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-4 sm:p-5">
           <Field label="Культура">
             <select value={crop} onChange={(e) => setCrop(e.target.value as Crop)} className="w-full border border-border rounded px-2 py-2 bg-card text-sm">
               {CROP_OPTIONS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
@@ -124,7 +124,7 @@ export function CalculatorClient({ farmerName, isReal, prefill }: Props) {
         </div>
       </Card>
 
-      <section className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Базовый потенциал" value={yld ? `${yld.expected} ц/га` : "—"} sub={yld?.limiting.name ? `лимит: ${yld.limiting.name}` : ""} />
         <Stat label="Потенциал с учётом погоды" value={`${expected} ц/га`} sub={weatherAdj.note} accent={weatherAdj.factor < 0.95 ? "warn" : "ok"} />
         <Stat label="Прогноз сбора" value={`${expectedHa} т`} sub={`выручка ≈ ${formatTenge(grossRevenue)}`} />

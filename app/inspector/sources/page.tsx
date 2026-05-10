@@ -13,7 +13,7 @@ export default function SourcesPage() {
   return (
     <div className="space-y-6">
       <section>
-        <h1 className="text-2xl font-bold tracking-tight">Реестр источников данных</h1>
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Реестр источников данных</h1>
         <p className="text-sm text-foreground/70 mt-1 max-w-3xl">
           Каждый факт в досье фермера ссылается на один из ниже перечисленных госисточников. Комиссия может перейти по ссылке и проверить
           оригинал документа (кадастровая выписка, ветеринарная справка, агрохимический паспорт, бюллетень и т.д.) по идентификатору, указанному
@@ -21,7 +21,7 @@ export default function SourcesPage() {
         </p>
       </section>
 
-      <div className="grid md:grid-cols-2 gap-3">
+      <div className="grid sm:grid-cols-2 gap-3">
         {ORDER.map((id) => {
           const s = SOURCES[id];
           return (
