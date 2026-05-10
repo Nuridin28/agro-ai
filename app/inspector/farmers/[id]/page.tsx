@@ -8,7 +8,7 @@ import { meteoFor } from "@/lib/mock/meteo";
 import { CROP_LABEL, BREED_LABEL } from "@/lib/types";
 import { CROP_NORMS, BREED_NORMS } from "@/lib/norms";
 import { computeExpectedYield } from "@/lib/verify/crop";
-import { verifyFarmer } from "@/lib/verify";
+import { verifyFarmerWithSatellite } from "@/lib/verify";
 import { Card, CardHeader, CategoryBadge, DecisionBadge, RiskScoreCard, SourcePill, formatTenge } from "@/components/ui";
 import { FindingCard } from "@/components/FindingCard";
 import { AiInsight } from "@/components/AiInsight";
@@ -24,8 +24,7 @@ import { checkUserApplication, sortBySeverity, declarationToText, type CheckSeve
 import { fetchSeason } from "@/lib/real-meteo";
 import { getSatelliteProvider } from "@/lib/satellite";
 import { computeFeatures } from "@/lib/satellite/ndvi";
-import { getS1Series, isSARConfigured } from "@/lib/satellite/sar";
-import { detectSAREvents } from "@/lib/satellite/sar-events";
+import { getSAREvents, isSARConfigured } from "@/lib/satellite/sar";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
 export function generateStaticParams() {
@@ -46,10 +45,11 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
   const farmer = findFarmer(id);
   if (!farmer) notFound();
 
-  // Базовый verdict считаем синхронно (без спутника) — чтобы первая отрисовка
-  // страницы (метео, агрохимия, заявки) не блокировалась SH-вызовами.
-  // Спутниковая карточка стримится отдельно через <Suspense>.
-  const verdict = verifyFarmer(farmer.id);
+  // Verdict с подключёнными спутниковыми проверками (NDVI + SAR + inactivity).
+  // Async: страница ждёт SH/CDSE, но это уже общий кеш (на диске и в Postgres),
+  // повторные открытия — мгновенно. Спутниковая карточка стримится отдельно
+  // через <Suspense>, чтобы заголовок и заявки появлялись до завершения NDVI.
+  const verdict = await verifyFarmerWithSatellite(farmer.id);
   const field = fieldFor(farmer.id);
   const season = seasonFor(farmer.id);
   const herd = herdFor(farmer.id);
@@ -379,9 +379,9 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
   if (polygon && !polygonIsApproximate) {
     const startDate = `${seasonYear}-04-01`;
     const endDate   = `${seasonYear}-10-15`;
-    const [ndviRes, sarRes] = await Promise.all([
+    const [ndviRes, sarEvents] = await Promise.all([
       getSatelliteProvider().getNDVITimeseries(polygon, startDate, endDate).catch(() => null),
-      isSARConfigured() ? getS1Series(polygon, startDate, endDate).catch(() => null) : Promise.resolve(null),
+      isSARConfigured() ? getSAREvents(polygon, startDate, endDate).catch(() => null) : Promise.resolve(null),
     ]);
     if (ndviRes) {
       const features = computeFeatures(ndviRes);
@@ -394,17 +394,14 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
         };
       }
     }
-    if (sarRes) {
-      const sarEvents = detectSAREvents(sarRes);
-      if (sarEvents) {
-        sarSummary = {
-          harvestDate: sarEvents.summary.harvestEvent?.date ?? null,
-          harvestConfidence: sarEvents.summary.harvestEvent?.confidence,
-          inactivity: sarEvents.summary.inactivity,
-          vhSeasonStdevDb: sarEvents.summary.vhSeasonStdevDb,
-          tillageEventsCount: sarEvents.summary.tillageEvents.length,
-        };
-      }
+    if (sarEvents) {
+      sarSummary = {
+        harvestDate: sarEvents.summary.harvestEvent?.date ?? null,
+        harvestConfidence: sarEvents.summary.harvestEvent?.confidence,
+        inactivity: sarEvents.summary.inactivity,
+        vhSeasonStdevDb: sarEvents.summary.vhSeasonStdevDb,
+        tillageEventsCount: sarEvents.summary.tillageEvents.length,
+      };
     }
   }
 

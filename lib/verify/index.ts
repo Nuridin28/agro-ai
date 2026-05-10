@@ -10,6 +10,7 @@ import { meteoFor } from "../mock/meteo";
 import { herdFor, pastureFor, bullsFor, saleDeclarationFor } from "../mock/livestock";
 import { polygonForFarmer } from "../mock/field-polygons";
 import { verifySatellite, checkInactivity } from "../satellite";
+import { getSAREvents, isSARConfigured } from "../satellite/sar";
 
 export { SEVERITY_WEIGHT };
 
@@ -120,7 +121,7 @@ export async function verifyFarmerWithSatellite(farmerId: string): Promise<Farme
   const endDate   = `${season.year}-09-30`;
   const baselineDate = season.declaredSowingDate;
 
-  const [spatial, inactivity] = await Promise.all([
+  const [spatial, inactivity, sar] = await Promise.all([
     verifySatellite({
       polygon: polyRec.polygon,
       startDate, endDate,
@@ -133,9 +134,12 @@ export async function verifyFarmerWithSatellite(farmerId: string): Promise<Farme
       baselineDate,
       windowDays: 45,
     }).catch((e) => { console.warn("[verify] satellite inactivity failed", e); return null; }),
+    isSARConfigured()
+      ? getSAREvents(polyRec.polygon, startDate, endDate).catch(() => null)
+      : Promise.resolve(null),
   ]);
 
-  const satFindings = runSatelliteChecks({ field, season, spatial, inactivity });
+  const satFindings = runSatelliteChecks({ field, season, spatial, inactivity, sar });
   if (satFindings.length === 0) return base;
 
   const findings = [...base.findings, ...satFindings];

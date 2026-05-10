@@ -217,6 +217,73 @@ export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
       note: `Sentinel-1 GRD · ${sar.summary.pointsUsed} наблюд., σVH ${sar.summary.vhSeasonStdevDb}дБ`,
     };
 
+    // ─── Cross-validation NDVI ↔ SAR ──────────────────────────────────────
+    // Если оба канала независимо показывают расхождение даты уборки в одну
+    // сторону — это самый сильный сигнал, объединяем в один critical-finding
+    // и удаляем дубли (CROP_HARVEST_DATE_MISMATCH из NDVI и CROP_SAR_HARVEST_MISMATCH
+    // из SAR), чтобы не считать риск дважды.
+    const ndviHarvestDate = ctx.spatial?.features?.harvestDate ?? null;
+    const sarHarvestDate = sar.summary.harvestEvent?.date ?? null;
+    if (season.declaredHarvestDate && ndviHarvestDate && sarHarvestDate) {
+      const dDecl = new Date(`${season.declaredHarvestDate}T00:00:00Z`).getTime();
+      const dNdvi = new Date(`${ndviHarvestDate}T00:00:00Z`).getTime();
+      const dSar  = new Date(`${sarHarvestDate}T00:00:00Z`).getTime();
+      const ndviDiff = Math.round((dNdvi - dDecl) / 86_400_000);
+      const sarDiff  = Math.round((dSar  - dDecl) / 86_400_000);
+      // Согласны: оба расходятся > 30 дн. в ту же сторону, и между собой ≤ 14 дн.
+      const sameDirection = (ndviDiff > 30 && sarDiff > 30) || (ndviDiff < -30 && sarDiff < -30);
+      const channelsAgree = Math.abs(ndviDiff - sarDiff) <= 14;
+      if (sameDirection && channelsAgree) {
+        // Удаляем уже добавленный одиночный NDVI-finding (если есть), чтобы
+        // не дублировать риск-тенге.
+        const ndviIdx = out.findIndex((f) => f.code === "CROP_HARVEST_DATE_MISMATCH");
+        if (ndviIdx >= 0) out.splice(ndviIdx, 1);
+        out.push({
+          code: "CROP_HARVEST_CROSS_VALIDATED",
+          severity: "critical",
+          title: "Расхождение даты уборки подтверждено двумя независимыми каналами",
+          detail: `И NDVI (оптика Sentinel-2), и радар Sentinel-1 показывают, что уборка прошла позже заявленной даты ${season.declaredHarvestDate}: NDVI зафиксировал падение биомассы ${ndviHarvestDate} (расхождение ${ndviDiff} дн.), радар — ${sarHarvestDate} (расхождение ${sarDiff} дн.). Два независимых физических канала согласны в пределах ${Math.abs(ndviDiff - sarDiff)} дн. — это максимальная уверенность движка.`,
+          expected: "Расхождение ≤ 30 дн. хотя бы по одному каналу",
+          actual:   `NDVI Δ=${ndviDiff}д, SAR Δ=${sarDiff}д`,
+          riskTenge: Math.round(season.subsidyTenge * 0.8),
+          evidence: [
+            ev("Заявленная уборка",   season.declaredHarvestDate, season.declSource),
+            ev("NDVI-событие",         ndviHarvestDate,            ctx.spatial!.source),
+            ev("SAR-событие",          sarHarvestDate,             sarSource),
+            ev("Согласие каналов",     `${Math.abs(ndviDiff - sarDiff)} дн.`, sarSource),
+          ],
+        });
+        // Отметим что уже выдали cross-validated, чтобы не добавлять отдельный SAR-finding
+        // в блоке ниже.
+        sar.summary.harvestEvent = null;
+      }
+    }
+
+    // Много событий уборки за сезон — индикатор многоукоса (люцерна, корм).
+    // Это не фрод, но если заявка под зерновую субсидию — категория не совпадает.
+    if (sar.summary.harvestEvents.length > 1) {
+      out.push({
+        code: "CROP_SAR_MULTIPLE_HARVESTS",
+        severity: "info",
+        title: `SAR: ${sar.summary.harvestEvents.length} события уборки за сезон`,
+        detail: `Радар зафиксировал ${sar.summary.harvestEvents.length} события уборки. Это характерно для многоукосных культур (люцерна, кормовые травы). Если заявка под зерновую субсидию — проверить тип культуры в декларации.`,
+        evidence: sar.summary.harvestEvents.slice(0, 4).map((e) =>
+          ev(`Уборка #${sar.summary.harvestEvents.indexOf(e) + 1}`, `${e.date} (conf ${e.confidence.toFixed(2)})`, sarSource),
+        ),
+      });
+    }
+
+    // Малое поле — отдельный warn, SAR ненадёжен на маленьких полигонах.
+    if (sar.summary.smallField) {
+      out.push({
+        code: "CROP_SAR_SMALL_FIELD",
+        severity: "info",
+        title: "SAR: поле меньше порога надёжности",
+        detail: `Среднее число пикселей S1 в усреднении < 50 — на маленьких полях speckle и краевые эффекты забивают сигнал. Финдинги SAR с пометкой «возможный шум» нужно проверять глазами.`,
+        evidence: [ev("Точек S1",  `${sar.summary.pointsUsed}`, sarSource)],
+      });
+    }
+
     // Расхождение даты уборки по SAR с заявленной — параллельно с NDVI-чеком.
     // SAR не зависит от облаков, поэтому даёт более точную дату, чем NDVI.
     if (sar.summary.harvestEvent && season.declaredHarvestDate) {

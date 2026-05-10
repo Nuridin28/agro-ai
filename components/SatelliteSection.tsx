@@ -10,8 +10,7 @@
 import { polygonForFarmer } from "@/lib/mock/field-polygons";
 import { seasonFor } from "@/lib/mock/crop";
 import { verifySatellite, checkInactivity } from "@/lib/satellite";
-import { getS1Series, isSARConfigured } from "@/lib/satellite/sar";
-import { detectSAREvents } from "@/lib/satellite/sar-events";
+import { getSAREvents, isSARConfigured } from "@/lib/satellite/sar";
 import { SatelliteCard } from "@/components/SatelliteCard";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
@@ -60,7 +59,7 @@ async function renderForPolygon(
   const startDate = `${year}-04-01`;
   const endDate = `${year}-09-30`;
   try {
-    const [spatial, inactivity, sarSeries] = await Promise.all([
+    const [spatial, inactivity, sarEvents] = await Promise.all([
       verifySatellite({
         polygon, startDate, endDate,
         // expectedSowingDate триггерит late_growth-проверку. Только если у нас
@@ -74,10 +73,9 @@ async function renderForPolygon(
         windowDays: 45,
       }),
       isSARConfigured()
-        ? getS1Series(polygon, startDate, endDate).catch(() => null)
+        ? getSAREvents(polygon, startDate, endDate).catch(() => null)
         : Promise.resolve(null),
     ]);
-    const sarEvents = sarSeries ? detectSAREvents(sarSeries) : null;
     return <SatelliteCard spatial={spatial} inactivity={inactivity} sar={sarEvents} className={className} />;
   } catch (e) {
     return (

@@ -232,20 +232,39 @@ function SARBlock({ sar }: { sar: SAREventsResult }) {
         <div className="text-[10px] uppercase tracking-wider text-foreground/60">
           Радарная проверка поля (Sentinel-1, всепогодная)
         </div>
-        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${accent}`}>
-          {summary.inactivity ? "Поле не работало весь сезон" : "Зафиксированы агро-события"}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {summary.smallField && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md border bg-amber-50 border-amber-200 text-amber-900" title="Среднее число пикселей < 50 — SAR неустойчив для такого размера полигона">
+              маленькое поле · сигнал шумит
+            </span>
+          )}
+          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${accent}`}>
+            {summary.inactivity ? "Поле не работало весь сезон" : "Зафиксированы агро-события"}
+          </span>
+        </div>
       </div>
       <div className="text-[12px] text-foreground/70 leading-relaxed">
         <strong className="text-foreground/85">Что это:</strong> радар Sentinel-1 пробивает облака
-        и видит изменения поверхности поля. Резкое падение биомассы (VH) = уборка, всплеск шероховатости (VV) = вспашка.
-        Это независимый от NDVI канал, особенно полезен весной и при облачности.
+        и видит изменения поверхности поля. Резкое падение биомассы (VH) = уборка, всплеск шероховатости (VV) = вспашка,
+        стабильный рост VH весной = всходы (посев). Это независимый от NDVI канал, особенно полезен весной и при облачности.
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SmallStat
-          label="Главное событие уборки"
+          label="Событие посева"
+          value={summary.sowingEvent?.date ?? "—"}
+          hint={summary.sowingEvent ? `confidence ${summary.sowingEvent.confidence.toFixed(2)}` : "стабильного роста биомассы не зафиксировано"}
+          accent={summary.sowingEvent ? undefined : "warn"}
+        />
+        <SmallStat
+          label={summary.harvestEvents.length > 1 ? `Событий уборки · ${summary.harvestEvents.length}` : "Событие уборки"}
           value={summary.harvestEvent?.date ?? "—"}
-          hint={summary.harvestEvent ? `confidence ${summary.harvestEvent.confidence.toFixed(2)}` : "падения биомассы не зафиксировано"}
+          hint={
+            summary.harvestEvents.length > 1
+              ? `многоукос: ${summary.harvestEvents.map((e) => e.date).join(", ")}`
+              : summary.harvestEvent
+              ? `confidence ${summary.harvestEvent.confidence.toFixed(2)}`
+              : "падения биомассы не зафиксировано"
+          }
           accent={summary.harvestEvent ? undefined : "warn"}
         />
         <SmallStat
@@ -256,14 +275,9 @@ function SARBlock({ sar }: { sar: SAREventsResult }) {
         />
         <SmallStat
           label="σ VH за сезон"
-          value={summary.vhSeasonStdevDb !== null ? `${summary.vhSeasonStdevDb} дБ` : "—"}
+          value={summary.vhSeasonStdevDb !== null ? `${summary.vhSeasonStdevDb} дБ · ${summary.pointsUsed} точек` : "—"}
           hint={summary.inactivity ? "ниже порога 1.0 — поле спит" : "норма для активного поля"}
           accent={summary.inactivity ? "warn" : undefined}
-        />
-        <SmallStat
-          label="Точек S1"
-          value={`${summary.pointsUsed}`}
-          hint="наблюдений в окне сезона"
         />
       </div>
       {events.length > 0 && (
@@ -273,7 +287,7 @@ function SARBlock({ sar }: { sar: SAREventsResult }) {
             {events.map((e, i) => (
               <li key={i}>
                 <span className="font-mono text-foreground/85">{e.date}</span> · {labelForKind(e.kind)} ·{" "}
-                <span className="text-foreground/60">{e.reason}</span>
+                <span className="text-foreground/60">conf {e.confidence.toFixed(2)} · {e.reason}</span>
               </li>
             ))}
           </ul>

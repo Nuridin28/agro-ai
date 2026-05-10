@@ -8,7 +8,9 @@
     "start": "next start",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env.local node_modules/.bin/tsx scripts/migrate.ts",
-    "db:studio": "node --env-file=.env.local node_modules/.bin/drizzle-kit studio"
+    "db:studio": "node --env-file=.env.local node_modules/.bin/drizzle-kit studio",
+    "sar:backtest": "node --env-file=.env.local node_modules/.bin/tsx scripts/sar-backtest.ts",
+    "test:sar": "node node_modules/.bin/tsx scripts/sar-events.test.ts"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",

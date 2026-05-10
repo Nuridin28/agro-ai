@@ -23,6 +23,9 @@ export const SAR_THRESHOLDS = {
   // Окно правдоподобия уборки по месяцам (1..12). Для KZ — июль–октябрь.
   HARVEST_MONTH_MIN: 7,
   HARVEST_MONTH_MAX: 10,
+  // Минимальный confidence (0..1), чтобы событие уборки попало в список
+  // (фильтрация шума, особенно для многоукосных полей).
+  HARVEST_MIN_CONFIDENCE: 0.4,
   // Всплеск VV за ≤ N дней для «вспашки/культивации» (дБ).
   TILLAGE_VV_RISE_DB: 2.0,
   TILLAGE_WINDOW_DAYS: 18,
@@ -32,6 +35,19 @@ export const SAR_THRESHOLDS = {
   TILLAGE_MONTH_MAX: 10,
   // Поле «спит»: σ VH за сезон < этого порога (дБ).
   INACTIVITY_VH_STDEV_MAX_DB: 1.0,
+  // Посев в SAR: рост VH над сезонным минимумом + удержание выше порога.
+  // Используем относительный порог, т.к. абсолютные дБ зависят от культуры
+  // и угла наблюдения.
+  SOWING_VH_RISE_DB: 2.0,             // VH должен подняться > min(VH) + этого
+  SOWING_HOLD_POINTS: 2,               // и удержаться над порогом столько точек
+  SOWING_MONTH_MIN: 4,                 // апрель
+  SOWING_MONTH_MAX: 6,                 // июнь
+  // Малое поле — < N пикселей в усреднении → speckle забивает сигнал.
+  SMALL_FIELD_MIN_PIXELS: 50,
+  // Дожди как источник ложных уборок: суммарные осадки в окне ±3 дня выше
+  // этого значения (мм) → событие помечается как «возможный дождь».
+  RAIN_EVENT_FILTER_MM: 8,
+  RAIN_FILTER_WINDOW_DAYS: 3,
 } as const;
 
 function median(arr: number[]): number {
@@ -71,6 +87,10 @@ function smooth(points: SARPoint[]): SARPoint[] {
   return out;
 }
 
+// Лёгкий ряд осадков для rain-фильтра. Используется только для подавления
+// «уборок», которые на самом деле — дождевой дип VH.
+export interface PrecipPoint { date: string; mm: number }
+
 export interface SAREventsResult {
   events: SAREvent[];
   // Сводка для UI и для verify-движка.
@@ -79,25 +99,51 @@ export interface SAREventsResult {
     vhSeasonMedianDb: number | null;
     vhSeasonStdevDb: number | null;
     inactivity: boolean;
-    // Главное событие уборки (наибольший confidence среди event.kind === "harvest").
+    smallField: boolean;       // < SMALL_FIELD_MIN_PIXELS — низкое доверие сигналу
+    // Все события уборки (могут быть и сено, и зерно — для многоукосных полей).
+    harvestEvents: SAREvent[];
+    // Главное событие (наибольший confidence) — для финдингов где нужна одна дата.
     harvestEvent: SAREvent | null;
     // Все события вспашки (могут быть и весной, и осенью).
     tillageEvents: SAREvent[];
+    // Событие посева (наиболее уверенный кандидат).
+    sowingEvent: SAREvent | null;
   };
 }
 
-export function detectSAREvents(series: SARTimeseries | null): SAREventsResult | null {
+export interface DetectOptions {
+  // Опциональный ряд осадков (например, из Open-Meteo) — даты должны быть в
+  // том же сезоне. Если задан, harvest-события рядом с дождём помечаются как
+  // ненадёжные (confidence × 0.4 или ниже).
+  precipitation?: PrecipPoint[];
+}
+
+// Сумма осадков в окне ±N дней вокруг даты события.
+function rainSumNear(precip: PrecipPoint[], date: string, windowDays: number): number {
+  const t = new Date(`${date}T00:00:00Z`).getTime();
+  let sum = 0;
+  for (const p of precip) {
+    const dt = new Date(`${p.date}T00:00:00Z`).getTime();
+    if (Math.abs(dt - t) <= windowDays * 86_400_000) sum += p.mm;
+  }
+  return sum;
+}
+
+export function detectSAREvents(series: SARTimeseries | null, opts: DetectOptions = {}): SAREventsResult | null {
   if (!series || series.points.length < SAR_THRESHOLDS.MIN_POINTS) return null;
   const points = smooth(series.points);
 
   const vhVals = points.map((p) => p.vhDb);
   const vhMedian = median(vhVals);
   const vhStdev = stdev(vhVals);
+  const vhMin = Math.min(...vhVals);
+  // Среднее число пикселей в усреднении: малое поле → SAR неустойчив.
+  const avgPixels = points.reduce((s, p) => s + p.sampleCount, 0) / points.length;
+  const smallField = avgPixels < SAR_THRESHOLDS.SMALL_FIELD_MIN_PIXELS;
 
   const events: SAREvent[] = [];
 
-  // Поле спит — низкое std весь сезон. Это сильный сигнал, выдаём одним
-  // событием на дату середины ряда.
+  // ──────────── inactivity ────────────
   const inactivity = vhStdev < SAR_THRESHOLDS.INACTIVITY_VH_STDEV_MAX_DB;
   if (inactivity) {
     events.push({
@@ -108,27 +154,37 @@ export function detectSAREvents(series: SARTimeseries | null): SAREventsResult |
     });
   }
 
-  // Уборка — резкое падение VH между двумя соседними точками в окне летн.-осен.,
-  // плюс пост-событие должно быть ниже сезонной медианы.
+  // ──────────── harvest (все события, не только top-1) ────────────
+  const rainFilter = opts.precipitation && opts.precipitation.length > 0;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i];
     const drop = a.vhDb - b.vhDb;
     if (drop < SAR_THRESHOLDS.HARVEST_VH_DROP_DB) continue;
     const m = monthOf(b.date);
     if (m < SAR_THRESHOLDS.HARVEST_MONTH_MIN || m > SAR_THRESHOLDS.HARVEST_MONTH_MAX) continue;
-    if (SAR_THRESHOLDS.HARVEST_VH_BELOW_MEDIAN && b.vhDb >= vhMedian) continue;
-    events.push({
-      kind: "harvest",
-      date: b.date,
-      confidence: Math.min(1, drop / (SAR_THRESHOLDS.HARVEST_VH_DROP_DB * 1.5)),
-      reason: `ΔVH = -${drop.toFixed(1)} дБ за ${daysBetween(a.date, b.date)} дн.; после события VH=${b.vhDb.toFixed(1)} < сезонной медианы ${vhMedian.toFixed(1)}`,
-    });
+    // Гейт «после события VH ниже сезонной медианы» — с допуском 0.5 дБ,
+    // чтобы поля где median проходит ровно через post-harvest уровень
+    // (типичная картина для зерновых) не отбрасывались строго.
+    if (SAR_THRESHOLDS.HARVEST_VH_BELOW_MEDIAN && b.vhDb > vhMedian + 0.5) continue;
+
+    let confidence = Math.min(1, drop / (SAR_THRESHOLDS.HARVEST_VH_DROP_DB * 1.5));
+    let reason = `ΔVH = -${drop.toFixed(1)} дБ за ${daysBetween(a.date, b.date)} дн.; после события VH=${b.vhDb.toFixed(1)} < медианы ${vhMedian.toFixed(1)}`;
+
+    // Rain filter: если рядом был сильный дождь — это, скорее всего, изменение
+    // влажности поверхности, а не уборка. Сильно режем confidence и помечаем.
+    if (rainFilter) {
+      const rainMm = rainSumNear(opts.precipitation!, b.date, SAR_THRESHOLDS.RAIN_FILTER_WINDOW_DAYS);
+      if (rainMm > SAR_THRESHOLDS.RAIN_EVENT_FILTER_MM) {
+        confidence *= 0.3;
+        reason += `. ⚠️ В окне ±${SAR_THRESHOLDS.RAIN_FILTER_WINDOW_DAYS}д выпало ${rainMm.toFixed(0)} мм осадков — возможно дождевой дип, а не уборка`;
+      }
+    }
+
+    if (confidence < SAR_THRESHOLDS.HARVEST_MIN_CONFIDENCE) continue;
+    events.push({ kind: "harvest", date: b.date, confidence, reason });
   }
 
-  // Вспашка — всплеск VV в окне ≤ 18 дней без последующего зелёного цикла.
-  // Здесь без NDVI мы не можем гарантировать «без зелёнки», но в окне
-  // начала сезона / после уборки всплеск VV почти всегда = механическое
-  // вмешательство.
+  // ──────────── tillage ────────────
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i];
     const rise = b.vvDb - a.vvDb;
@@ -145,10 +201,40 @@ export function detectSAREvents(series: SARTimeseries | null): SAREventsResult |
     });
   }
 
-  // Главное событие уборки — берём с наибольшим confidence.
-  const harvestEvent = events
+  // ──────────── sowing ────────────
+  // Первая точка в окне апрель-июнь, в которой VH > min(VH) + 2dB и следующие
+  // SOWING_HOLD_POINTS точек тоже над этим порогом (стабильный набор биомассы).
+  let sowingEvent: SAREvent | null = null;
+  const sowingThreshold = vhMin + SAR_THRESHOLDS.SOWING_VH_RISE_DB;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (p.vhDb < sowingThreshold) continue;
+    const m = monthOf(p.date);
+    if (m < SAR_THRESHOLDS.SOWING_MONTH_MIN || m > SAR_THRESHOLDS.SOWING_MONTH_MAX) continue;
+    let held = 0;
+    for (let k = 1; k <= SAR_THRESHOLDS.SOWING_HOLD_POINTS; k++) {
+      const nxt = points[i + k];
+      if (!nxt) break;
+      if (nxt.vhDb >= sowingThreshold) held++;
+      else break;
+    }
+    if (held >= SAR_THRESHOLDS.SOWING_HOLD_POINTS) {
+      sowingEvent = {
+        kind: "sowing",
+        date: p.date,
+        confidence: Math.min(1, (p.vhDb - vhMin) / (SAR_THRESHOLDS.SOWING_VH_RISE_DB * 2)),
+        reason: `VH ${p.vhDb.toFixed(1)} дБ поднялся выше сезонного min ${vhMin.toFixed(1)}+${SAR_THRESHOLDS.SOWING_VH_RISE_DB}, удержался ${held} точки`,
+      };
+      events.push(sowingEvent);
+      break;
+    }
+  }
+
+  // Сортированный список уборок (от высокого confidence к низкому).
+  const harvestEvents = events
     .filter((e) => e.kind === "harvest")
-    .sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+    .sort((a, b) => b.confidence - a.confidence);
+  const harvestEvent = harvestEvents[0] ?? null;
   const tillageEvents = events.filter((e) => e.kind === "tillage");
 
   return {
@@ -158,8 +244,11 @@ export function detectSAREvents(series: SARTimeseries | null): SAREventsResult |
       vhSeasonMedianDb: +vhMedian.toFixed(2),
       vhSeasonStdevDb: +vhStdev.toFixed(2),
       inactivity,
+      smallField,
+      harvestEvents,
       harvestEvent,
       tillageEvents,
+      sowingEvent,
     },
   };
 }

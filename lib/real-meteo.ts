@@ -176,6 +176,28 @@ export async function fetchSeason(lat: number, lng: number, year: number): Promi
   };
 }
 
+// Дневные осадки на сезон вегетации — нужны для rain-фильтра SAR-детектора:
+// событие «уборки» рядом со значимым дождём, скорее всего, на самом деле
+// дождевой дип VH, а не реальное снятие урожая.
+export async function fetchDailyPrecipitation(
+  lat: number, lng: number, year: number,
+): Promise<{ date: string; mm: number }[]> {
+  const start = `${year}-03-15`;
+  const end   = `${year}-10-31`;
+  const url = `${ARCHIVE_URL}?latitude=${lat}&longitude=${lng}` +
+    `&start_date=${start}&end_date=${end}` +
+    `&daily=precipitation_sum&timezone=auto`;
+  const j = await getJson(url, 25000).catch(() => null);
+  if (!j) return [];
+  const days: string[] = j.daily?.time ?? [];
+  const pr: (number | null)[] = j.daily?.precipitation_sum ?? [];
+  const out: { date: string; mm: number }[] = [];
+  for (let i = 0; i < days.length; i++) {
+    if (typeof pr[i] === "number") out.push({ date: days[i], mm: pr[i] as number });
+  }
+  return out;
+}
+
 // Долгосрочный анализ осадков: суммы по месяцам и годам + многолетнее среднее.
 // fromYear..toYear включительно; для текущего года получаем YTD (partial=true).
 export async function fetchLongTermPrecip(

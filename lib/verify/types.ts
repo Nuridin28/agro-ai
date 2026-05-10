@@ -30,6 +30,9 @@ export type CheckCode =
   | "CROP_SAR_HARVEST_MISMATCH"    // SAR: дата уборки по падению VH расходится с заявленной > 30 дн.
   | "CROP_SAR_FIELD_INACTIVE"      // SAR: σ VH за сезон < порога — поле спит весь сезон
   | "CROP_SAR_NO_TILLAGE"          // SAR: нет всплеска VV в весеннем окне — не пахали
+  | "CROP_HARVEST_CROSS_VALIDATED" // NDVI+SAR согласованно показывают расхождение даты уборки → высокий confidence
+  | "CROP_SAR_MULTIPLE_HARVESTS"   // SAR: > 1 события уборки за сезон (многоукос — допустимо, но проверить категорию субсидии)
+  | "CROP_SAR_SMALL_FIELD"         // SAR: поле меньше порога надёжности (< 50 пикселей), сигнал шумит
   // Скотоводство
   | "LIV_BULL_REPRO_GAP"           // быки куплены — приплода нет
   | "LIV_GENETIC_NO_GAIN"          // нет прироста привеса от племенных быков

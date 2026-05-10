@@ -17,6 +17,8 @@ import { db } from "../db";
 import { fieldSarObservations } from "../db/schema";
 import type { FieldPolygon, SARTimeseries, SARPoint } from "./types";
 import { fetchS1SeriesFromCDSE } from "./cdse-provider";
+import { mockS1Series } from "./mock-sar";
+import { lookupScenario, type MockScenario } from "./mock-provider";
 
 // Стабильный ключ полигона: округляем координаты до 5 знаков (~1 м точности
 // для широт KZ) и хешируем. Если фермер перерегистрируется и присылает тот
@@ -87,9 +89,15 @@ async function writeToDb(fieldKey: string, polygon: FieldPolygon, series: SARTim
     });
 }
 
-// TTL свежести кеша в БД. Если максимальный fetchedAt по диапазону старше
-// этого срока — refetch-аем (S1 публикует снимок с лагом 2–4 дня).
-const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// TTL свежести кеша. Год запроса определяет стратегию:
+//  - прошлые сезоны: данные не меняются → бесконечный TTL.
+//  - текущий сезон: 7 дней (S1 публикует свежий снимок с лагом 2–4 дн.).
+const CACHE_TTL_CURRENT_MS = 7 * 24 * 60 * 60 * 1000;
+function ttlForRange(startDate: string): number {
+  const reqYear = Number(startDate.slice(0, 4));
+  const nowYear = new Date().getUTCFullYear();
+  return reqYear < nowYear ? Infinity : CACHE_TTL_CURRENT_MS;
+}
 
 // Главный API модуля. Используется рендером инспекторской страницы и
 // SAR-cron эндпоинтом. forceRefresh=true пропускает кэш (для /api/satellite/sar/refresh).
@@ -104,7 +112,9 @@ export async function getS1Series(
   // 1) Попытка из БД — отдаём, если кеш свежий и не было forceRefresh.
   if (!opts.forceRefresh) {
     const cache = await readFromDb(fieldKey, startDate, endDate);
-    if (cache.points.length > 0 && cache.fetchedAt && Date.now() - cache.fetchedAt.getTime() < CACHE_TTL_MS) {
+    const ttl = ttlForRange(startDate);
+    const fresh = cache.fetchedAt && (ttl === Infinity || Date.now() - cache.fetchedAt.getTime() < ttl);
+    if (cache.points.length > 0 && fresh) {
       return {
         polygon, startDate, endDate,
         points: cache.points,
@@ -113,8 +123,17 @@ export async function getS1Series(
     }
   }
 
-  // 2) Запрос к CDSE. Если кредов нет → null, ничего не пишем.
-  const fresh = await fetchS1SeriesFromCDSE(polygon, startDate, endDate);
+  // 2) Запрос к CDSE. Если кредов нет → null.
+  let fresh = await fetchS1SeriesFromCDSE(polygon, startDate, endDate);
+
+  // 3) Mock-фолбэк: если CDSE-кредов нет (или ответ пустой), но провайдер
+  // спутника = mock — генерируем детерминированный SAR-ряд по сценарию поля.
+  // Так демо без CDSE не теряет SAR-блок.
+  if ((!fresh || fresh.points.length === 0) && process.env.SAT_PROVIDER === "mock") {
+    const scenario = lookupMockScenario(polygon);
+    const mocked = mockS1Series(polygon, startDate, endDate, scenario);
+    return mocked;
+  }
   if (!fresh) return null;
 
   // 3) Пишем в БД для следующих запросов и возвращаем как есть.
@@ -124,8 +143,49 @@ export async function getS1Series(
   return fresh;
 }
 
-// Проверка «настроен ли вообще SAR» — используется UI, чтобы не показывать
-// пустую SAR-секцию когда фермер не подключил CDSE. Дешёвая проверка env.
+// Проверка «доступен ли вообще SAR-канал» для UI и обвязки. True если
+// настроен CDSE ИЛИ если мок-провайдер активирован (демо без интернет-доступа).
 export function isSARConfigured(): boolean {
-  return !!(process.env.CDSE_CLIENT_ID && process.env.CDSE_CLIENT_SECRET);
+  if (process.env.CDSE_CLIENT_ID && process.env.CDSE_CLIENT_SECRET) return true;
+  if (process.env.SAT_PROVIDER === "mock") return true;
+  return false;
+}
+
+// Реестр сценариев такой же, как у NDVI-мока (по центроиду полигона).
+function lookupMockScenario(polygon: FieldPolygon): MockScenario {
+  const [lng, lat] = polygonCentroid(polygon);
+  return lookupScenario([lat, lng]) ?? "medium";
+}
+
+// Центр полигона по простому среднему координат — для запроса осадков в одной
+// точке (Open-Meteo). Точности достаточно: rain-фильтр работает в окне ±3 дня
+// и нечувствителен к смещению на несколько км.
+export function polygonCentroid(polygon: FieldPolygon): [number, number] {
+  let sx = 0, sy = 0, n = 0;
+  for (const [lng, lat] of polygon) { sx += lng; sy += lat; n++; }
+  return [sx / n, sy / n];
+}
+
+// Высокоуровневый helper: ряд S1 + осадки + детектор. Используется всеми
+// callsite-ами, которые хотят и события, и rain-фильтр. Если осадки не
+// удалось получить — просто запускаем детектор без фильтра.
+import { detectSAREvents, type SAREventsResult } from "./sar-events";
+import { fetchDailyPrecipitation } from "../real-meteo";
+
+export async function getSAREvents(
+  polygon: FieldPolygon,
+  startDate: string,
+  endDate: string,
+  opts: { forceRefresh?: boolean; rainFilter?: boolean } = {},
+): Promise<SAREventsResult | null> {
+  const series = await getS1Series(polygon, startDate, endDate, opts);
+  if (!series) return null;
+  let precipitation: { date: string; mm: number }[] | undefined;
+  if (opts.rainFilter !== false) {
+    const [lng, lat] = polygonCentroid(polygon);
+    const year = Number(startDate.slice(0, 4));
+    precipitation = await fetchDailyPrecipitation(lat, lng, year).catch(() => undefined);
+    if (!precipitation || precipitation.length === 0) precipitation = undefined;
+  }
+  return detectSAREvents(series, { precipitation });
 }

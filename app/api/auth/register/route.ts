@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { hashPassword, makeSessionCookieValue, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/auth";
 import { createUser, findByEmail, type UserField } from "@/lib/users-store";
 import { rateLimit, clientIp, tooManyRequests } from "@/lib/rate-limit";
+import { getS1Series, isSARConfigured } from "@/lib/satellite/sar";
+import type { FieldPolygon } from "@/lib/satellite/types";
 
 interface RegisterBody {
   email: string;
@@ -54,6 +56,27 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "Email уже занят" }, { status: 409 });
     }
     return Response.json({ error: String(e) }, { status: 500 });
+  }
+
+  // Прогрев SAR-кеша: fire-and-forget, не блокируем ответ. К моменту, когда
+  // пользователь откроется в инспекторском досье, точки уже будут в БД.
+  // Только если есть полигоны и SAR настроен.
+  if (isSARConfigured()) {
+    const polygons: FieldPolygon[] = (user.fields ?? [])
+      .map((f) => f.polygon4326)
+      .filter((p): p is number[][] => Array.isArray(p) && p.length >= 4) as FieldPolygon[];
+    if (polygons.length > 0) {
+      const now = new Date();
+      const seasonYear = now.getUTCMonth() >= 9 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+      const startDate = `${seasonYear}-04-01`;
+      const endDate   = `${seasonYear}-10-15`;
+      // Не await-им, не пишем в res — пусть работает после ответа.
+      void Promise.allSettled(polygons.map((p) =>
+        getS1Series(p, startDate, endDate).catch((e) =>
+          console.warn("[register] SAR warmup failed:", (e as Error).message)
+        )
+      ));
+    }
   }
 
   const sessionValue = makeSessionCookieValue(user.id);

@@ -30,6 +30,12 @@ export function registerMockScenario(centroid: [number, number], scenario: MockS
   SCENARIO_REGISTRY.set(centroidKey(centroid), scenario);
 }
 
+// Доступ к зарегистрированному сценарию из других модулей (mock-sar и т.п.).
+// Возвращает null, если сценарий для данного центроида не регистрировался.
+export function lookupScenario(centroid: [number, number]): MockScenario | null {
+  return SCENARIO_REGISTRY.get(centroidKey(centroid)) ?? null;
+}
+
 function centroidKey([lat, lng]: [number, number]): string {
   return `${lat.toFixed(3)},${lng.toFixed(3)}`;
 }
