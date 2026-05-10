@@ -89,6 +89,9 @@ export interface CropSeason {
   fertilizerKgHa: number;         // факт.закуп удобрений на га (по Qoldau)
   seedKgHa: number;               // нормы высева
   declaredSowingDate: string;
+  // Заявленная дата уборки — опционально. Сравнивается с NDVI-событием
+  // (резкое падение биомассы после пика) в спутниковом фрод-чеке.
+  declaredHarvestDate?: string;
   subsidyTenge: number;           // сумма субсидии за сезон
   declSource: SourceRef;          // Qoldau
   yieldSource: SourceRef;         // stat.gov.kz / Qoldau отчётность

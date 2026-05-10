@@ -11,6 +11,10 @@ export interface CropDeclaration {
   declaredYieldCha: number;
   fertilizerKgHa: number;
   declaredSowingDate: string;
+  // Заявленная дата уборки — опциональное поле, добавлено позже sowingDate
+  // и потому может отсутствовать в старых записях. Если задано, движок
+  // спутниковой проверки сравнивает её с детектированной по NDVI датой.
+  declaredHarvestDate?: string;
 }
 
 export interface StoredApplication {

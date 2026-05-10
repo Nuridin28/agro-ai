@@ -8,6 +8,13 @@
       "when": 1778436562027,
       "tag": "0000_cool_pride",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778443180013,
+      "tag": "0001_field_sar_observations",
+      "breakpoints": true
     }
   ]
 }

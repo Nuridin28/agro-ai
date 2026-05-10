@@ -53,6 +53,11 @@ export async function findById(id: string): Promise<User | null> {
   return rows[0] ? rowToUser(rows[0]) : null;
 }
 
+export async function getAllUsers(): Promise<User[]> {
+  const rows = await db.select().from(users);
+  return rows.map(rowToUser);
+}
+
 export async function createUser(input: Omit<User, "id" | "createdAt">): Promise<User> {
   const email = input.email.trim().toLowerCase();
   const existing = await findByEmail(email);

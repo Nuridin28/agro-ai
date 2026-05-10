@@ -31,7 +31,7 @@ export function buildAdvice(farmer: Farmer): Advice[] {
   const field = fieldFor(farmer.id);
   const season = seasonFor(farmer.id);
   const herd = herdFor(farmer.id);
-  const meteo = field ? meteoFor(field.region.katoCode, season?.year ?? 2024) : undefined;
+  const meteo = field ? meteoFor(field.region.katoCode, season?.year ?? 2025) : undefined;
 
   // 1) Биологический потолок vs заявленный сбор
   if (field && season) {

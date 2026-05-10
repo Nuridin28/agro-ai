@@ -9,6 +9,7 @@ import type { Finding, Evidence } from "./types";
 import type { SatelliteVerification, InactivityCheckResult } from "../satellite/types";
 import { CROP_LABEL } from "../types";
 import { SAT_THRESHOLDS } from "../satellite/ndvi";
+import type { SAREventsResult } from "../satellite/sar-events";
 
 function ev(label: string, value: string, sourceObj: Evidence["source"]): Evidence {
   return { label, value, source: sourceObj };
@@ -19,6 +20,7 @@ export interface SatelliteContext {
   season: CropSeason;
   spatial?: SatelliteVerification | null;
   inactivity?: InactivityCheckResult | null;
+  sar?: SAREventsResult | null;
 }
 
 export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
@@ -123,6 +125,62 @@ export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
         });
       }
     }
+
+    // Сравнение заявленной даты уборки с детектированной по NDVI.
+    if (season.declaredHarvestDate && f.harvestDate) {
+      const dDecl = new Date(`${season.declaredHarvestDate}T00:00:00Z`).getTime();
+      const dObs  = new Date(`${f.harvestDate}T00:00:00Z`).getTime();
+      const diffDays = Math.round((dObs - dDecl) / 86_400_000);
+      const absDays = Math.abs(diffDays);
+      if (absDays > 30) {
+        const direction = diffDays > 0 ? "позже" : "раньше";
+        out.push({
+          code: "CROP_HARVEST_DATE_MISMATCH",
+          severity: "high",
+          title: "Заявленная дата уборки расходится со спутником",
+          detail: `По декларации уборка ${season.declaredHarvestDate}, по NDVI поле перестало зеленеть только ${f.harvestDate} (${absDays} дн. ${direction}). Это классический признак «бумажной уборки» для досрочного закрытия отчётности.`,
+          expected: `|Δ| ≤ ${30} дн.`,
+          actual:   `Δ = ${diffDays} дн.`,
+          riskTenge: Math.round(season.subsidyTenge * 0.5),
+          evidence: [
+            ev("Заявленная дата уборки",  season.declaredHarvestDate, season.declSource),
+            ev("Падение NDVI ниже порога", f.harvestDate,             sat),
+            ev("Дата пика NDVI",          f.peakDate ?? "—",          sat),
+          ],
+        });
+      } else if (absDays > 15) {
+        out.push({
+          code: "CROP_HARVEST_DATE_DRIFT",
+          severity: "warn",
+          title: "Дата уборки слегка расходится со спутником",
+          detail: `По декларации уборка ${season.declaredHarvestDate}, по NDVI — ${f.harvestDate} (${absDays} дн.). В пределах допустимого «шага облачности», но проверить вручную.`,
+          expected: `|Δ| ≤ 15 дн.`,
+          actual:   `Δ = ${diffDays} дн.`,
+          riskTenge: 0,
+          evidence: [
+            ev("Заявленная дата уборки", season.declaredHarvestDate, season.declSource),
+            ev("Падение NDVI",            f.harvestDate,             sat),
+          ],
+        });
+      }
+    }
+
+    // Полный цикл «рост → пик → падение» не закрылся в окне сезона.
+    if (f.vegetationPresent && f.peakDate && !f.harvestDetected) {
+      out.push({
+        code: "CROP_NO_HARVEST_DETECTED",
+        severity: "warn",
+        title: "Уборка не подтверждается снимками",
+        detail: `Пик NDVI был зафиксирован ${f.peakDate}, но падение биомассы ниже порога ${0.20} до конца сезона не наблюдалось. Возможные причины: уборка не проведена, поле под паром/кормом, либо данные за конец сезона потеряны из-за облачности.`,
+        expected: "После пика NDVI должен упасть ниже 0.20 в окне сезона",
+        actual:   `Пик ${f.peakDate}, падения не зафиксировано`,
+        riskTenge: season.declaredHarvestDate ? Math.round(season.subsidyTenge * 0.3) : 0,
+        evidence: [
+          ev("Дата пика NDVI",         f.peakDate,                                sat),
+          ev("Заявленная уборка",      season.declaredHarvestDate ?? "—",         season.declSource),
+        ],
+      });
+    }
   }
 
   // Year-over-Year: если пик NDVI заметно ниже прошлогоднего, это аномалия.
@@ -143,6 +201,78 @@ export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
           ev(`NDVI max ${spatial.yoy.previousYear}`, `${spatial.yoy.ndviMaxPrev}`, spatial.source),
           ev(`NDVI max ${season.year}`,               `${spatial.features?.ndviMax ?? "—"}`, spatial.source),
           ev("Старт вегетации (YoY)", `Δ ${spatial.yoy.growthStartDeltaDays ?? "—"} дн.`, spatial.source),
+        ],
+      });
+    }
+  }
+
+  // SAR-чеки: события из ряда S1 backscatter. Не валят сборку без CDSE —
+  // ctx.sar просто null, и блок пропускается.
+  if (ctx.sar) {
+    const sar = ctx.sar;
+    const sarSource: SourceRef = {
+      source: "AGRODATA",
+      docId: `SAR-S1-${season.year}-${season.farmerId}`,
+      fetchedAt: new Date().toISOString(),
+      note: `Sentinel-1 GRD · ${sar.summary.pointsUsed} наблюд., σVH ${sar.summary.vhSeasonStdevDb}дБ`,
+    };
+
+    // Расхождение даты уборки по SAR с заявленной — параллельно с NDVI-чеком.
+    // SAR не зависит от облаков, поэтому даёт более точную дату, чем NDVI.
+    if (sar.summary.harvestEvent && season.declaredHarvestDate) {
+      const dDecl = new Date(`${season.declaredHarvestDate}T00:00:00Z`).getTime();
+      const dObs  = new Date(`${sar.summary.harvestEvent.date}T00:00:00Z`).getTime();
+      const diffDays = Math.round((dObs - dDecl) / 86_400_000);
+      const absDays = Math.abs(diffDays);
+      if (absDays > 30) {
+        out.push({
+          code: "CROP_SAR_HARVEST_MISMATCH",
+          severity: "high",
+          title: "SAR: дата уборки расходится с заявленной",
+          detail: `Sentinel-1 зафиксировал падение VH (биомассы) ${sar.summary.harvestEvent.date}, фермер заявил уборку ${season.declaredHarvestDate} (расхождение ${absDays} дн.). ${sar.summary.harvestEvent.reason}.`,
+          expected: `|Δ| ≤ 30 дн.`,
+          actual:   `Δ = ${diffDays} дн.`,
+          riskTenge: Math.round(season.subsidyTenge * 0.5),
+          evidence: [
+            ev("Заявленная уборка",   season.declaredHarvestDate,             season.declSource),
+            ev("SAR-событие уборки",   sar.summary.harvestEvent.date,         sarSource),
+            ev("Confidence",           sar.summary.harvestEvent.confidence.toFixed(2), sarSource),
+          ],
+        });
+      }
+    }
+
+    // Поле спит весь сезон по SAR — даже если NDVI чем-то закрыт облаками,
+    // S1 ловит отсутствие изменений независимо.
+    if (sar.summary.inactivity) {
+      out.push({
+        code: "CROP_SAR_FIELD_INACTIVE",
+        severity: "high",
+        title: "SAR: поле не работало весь сезон",
+        detail: `Sentinel-1 не зафиксировал значимых изменений backscatter (σ VH = ${sar.summary.vhSeasonStdevDb} дБ при пороге ${1.0} дБ). За сезон ${season.year} на поле нет ни вспашки, ни уборки. Заявленная агротехническая деятельность не подтверждается радаром.`,
+        expected: `σ VH ≥ 1.0 дБ за сезон`,
+        actual:   `σ VH = ${sar.summary.vhSeasonStdevDb} дБ`,
+        riskTenge: Math.round(season.subsidyTenge * 0.7),
+        evidence: [
+          ev("σ VH (сезон)",            `${sar.summary.vhSeasonStdevDb} дБ`,    sarSource),
+          ev("Медиана VH (сезон)",     `${sar.summary.vhSeasonMedianDb} дБ`,   sarSource),
+          ev("Наблюдений S1",           `${sar.summary.pointsUsed}`,            sarSource),
+        ],
+      });
+    } else if (sar.summary.tillageEvents.length === 0 && season.declaredSowingDate) {
+      // Tillage-событие не нашлось — подозрительно, но мягче (warn), потому что
+      // вспашка не всегда даёт яркий пик в backscatter.
+      out.push({
+        code: "CROP_SAR_NO_TILLAGE",
+        severity: "warn",
+        title: "SAR: следов вспашки не обнаружено",
+        detail: `Sentinel-1 не зафиксировал всплеска VV (роста шероховатости почвы) в окне марта-октября ${season.year}. Это слабый, но дополнительный признак отсутствия механических работ перед посевом, заявленным на ${season.declaredSowingDate}.`,
+        expected: `≥ 1 события tillage в сезоне`,
+        actual:   `0 событий`,
+        riskTenge: 0,
+        evidence: [
+          ev("σ VH (сезон)",            `${sar.summary.vhSeasonStdevDb} дБ`,    sarSource),
+          ev("Наблюдений S1",           `${sar.summary.pointsUsed}`,            sarSource),
         ],
       });
     }

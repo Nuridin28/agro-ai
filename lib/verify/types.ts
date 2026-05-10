@@ -24,6 +24,12 @@ export type CheckCode =
   | "CROP_HETEROGENEOUS_FIELD"     // спутник: высокая σ NDVI — мозаичная пашня
   | "CROP_SLOW_GROWTH"             // спутник: низкая скорость прироста NDVI при субсидии
   | "CROP_YOY_DECLINE"             // спутник: пик NDVI заметно ниже прошлогоднего
+  | "CROP_HARVEST_DATE_MISMATCH"   // спутник: заявленная дата уборки расходится с NDVI-событием > 30 дн.
+  | "CROP_HARVEST_DATE_DRIFT"      // спутник: расхождение даты уборки 15–30 дн. (мягкое)
+  | "CROP_NO_HARVEST_DETECTED"     // спутник: NDVI рос и достиг пика, но падения биомассы в окне не было
+  | "CROP_SAR_HARVEST_MISMATCH"    // SAR: дата уборки по падению VH расходится с заявленной > 30 дн.
+  | "CROP_SAR_FIELD_INACTIVE"      // SAR: σ VH за сезон < порога — поле спит весь сезон
+  | "CROP_SAR_NO_TILLAGE"          // SAR: нет всплеска VV в весеннем окне — не пахали
   // Скотоводство
   | "LIV_BULL_REPRO_GAP"           // быки куплены — приплода нет
   | "LIV_GENETIC_NO_GAIN"          // нет прироста привеса от племенных быков

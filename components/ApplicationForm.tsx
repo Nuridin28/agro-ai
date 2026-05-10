@@ -137,13 +137,22 @@ export function ApplicationForm({ farmerId }: Props) {
               />
             </label>
 
-            <label className="block sm:col-span-2 lg:col-span-2">
+            <label className="block">
               <span className="text-[11px] text-foreground/70">Дата посева</span>
               <input
                 name="sowing_date"
                 type="date"
                 className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:border-accent focus:outline-none tabular-nums"
                 required
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[11px] text-foreground/70">Плановая дата уборки <span className="text-foreground/40">(опционально)</span></span>
+              <input
+                name="harvest_date"
+                type="date"
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-card text-sm focus:border-accent focus:outline-none tabular-nums"
               />
             </label>
           </div>

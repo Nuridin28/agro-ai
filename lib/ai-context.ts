@@ -23,9 +23,9 @@ export function buildFarmerContext(farmerId: string): string {
   const bulls = bullsFor(farmerId);
   const sale = saleDeclarationFor(farmerId);
   const meteo = field
-    ? meteoFor(field.region.katoCode, season?.year ?? 2024)
+    ? meteoFor(field.region.katoCode, season?.year ?? 2025)
     : pasture
-    ? meteoFor(pasture.region.katoCode, herd?.year ?? 2024)
+    ? meteoFor(pasture.region.katoCode, herd?.year ?? 2025)
     : undefined;
 
   const lines: string[] = [];

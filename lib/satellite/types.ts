@@ -105,6 +105,13 @@ export interface NDVIFeatures {
   // Длина сезона вегетации (дней между датой пересечения порога вверх и вниз):
   // короткий сезон = ранняя засуха или преждевременная уборка.
   seasonLengthDays: number | null;
+  // Дата, на которую NDVI после пика впервые опустился ниже порога
+  // GROWTH_START_NDVI - 0.05. Это «событие уборки» — биомасса исчезла.
+  // null, если ряд закончился до того, как NDVI упал — поле не убрано в окне.
+  harvestDate: string | null;
+  // Удалось ли увидеть полный цикл «рост → пик → падение» в окне ряда.
+  // false при peak без последующего падения = подозрение, что уборки не было.
+  harvestDetected: boolean;
 }
 
 // Один спутниковый снимок (URL для UI и метаинформация).
@@ -147,6 +154,43 @@ export interface SatelliteVerification {
   images?: SatelliteImage[];
   // Сравнение с прошлым годом — null, если данных по предыдущему году нет.
   yoy?: YearOverYear | null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// SAR (Sentinel-1 GRD) backscatter ряд и события
+// ────────────────────────────────────────────────────────────────────────────
+
+// Одна точка временного ряда S1: средний backscatter по полигону в дБ
+// (Sigma0 → 10*log10). VV — основной для отслеживания шероховатости,
+// VH — для биомассы. Sentinel-1 revisit ~6–12 дней (зависит от констелляции).
+export interface SARPoint {
+  date: string;           // YYYY-MM-DD (UTC, дата начала интервала)
+  vvDb: number;           // -25..0 дБ типично
+  vhDb: number;           // -30..-10 дБ типично
+  sampleCount: number;    // сколько пикселей участвовало
+}
+
+export interface SARTimeseries {
+  polygon: FieldPolygon;
+  startDate: string;
+  endDate: string;
+  points: SARPoint[];
+  // Какой провайдер реально отдал данные ("cdse"/"sentinel-hub"/"mock") —
+  // нужно для SourceRef в Findings и UI.
+  providerId: SatelliteProviderId;
+}
+
+// События, извлечённые из SAR-ряда. Каждое — это локализованное во времени
+// агрономическое действие, привязанное к сильному изменению backscatter.
+export type SAREventKind = "harvest" | "tillage" | "sowing" | "inactivity";
+
+export interface SAREvent {
+  kind: SAREventKind;
+  date: string;             // YYYY-MM-DD
+  // Уверенность 0..1 — насколько ярко выражено изменение в ряду.
+  confidence: number;
+  // Метрика, по которой событие распознано (для аудита и UI-тултипа).
+  reason: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

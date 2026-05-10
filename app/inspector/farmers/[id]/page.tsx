@@ -20,8 +20,12 @@ import { findById as findUserById, type User } from "@/lib/users-store";
 import { OBLAST_NAMES, findLayer } from "@/lib/giprozem-catalog";
 import { RealMeteoCard } from "@/components/RealMeteoCard";
 import { RealMeteoSkeleton } from "@/components/RealMeteoSkeleton";
-import { checkUserApplication, sortBySeverity, declarationToText, type CheckSeverity } from "@/lib/applications-check";
+import { checkUserApplication, sortBySeverity, declarationToText, type CheckSeverity, type NDVISummaryForCheck, type SARSummaryForCheck } from "@/lib/applications-check";
 import { fetchSeason } from "@/lib/real-meteo";
+import { getSatelliteProvider } from "@/lib/satellite";
+import { computeFeatures } from "@/lib/satellite/ndvi";
+import { getS1Series, isSARConfigured } from "@/lib/satellite/sar";
+import { detectSAREvents } from "@/lib/satellite/sar-events";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
 export function generateStaticParams() {
@@ -368,6 +372,42 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
   // профиль поля, без late_growth-проверки.
   const useDeclForCheck = !!seasonDecl;
 
+  // NDVI и SAR-сводки для проверки заявок. Тянем параллельно — оба запроса
+  // идут к Sentinel Hub-совместимым API, но к разным провайдерам.
+  let ndviSummary: NDVISummaryForCheck | undefined;
+  let sarSummary: SARSummaryForCheck | undefined;
+  if (polygon && !polygonIsApproximate) {
+    const startDate = `${seasonYear}-04-01`;
+    const endDate   = `${seasonYear}-10-15`;
+    const [ndviRes, sarRes] = await Promise.all([
+      getSatelliteProvider().getNDVITimeseries(polygon, startDate, endDate).catch(() => null),
+      isSARConfigured() ? getS1Series(polygon, startDate, endDate).catch(() => null) : Promise.resolve(null),
+    ]);
+    if (ndviRes) {
+      const features = computeFeatures(ndviRes);
+      if (features) {
+        ndviSummary = {
+          harvestDate: features.harvestDate,
+          harvestDetected: features.harvestDetected,
+          peakDate: features.peakDate,
+          ndviMax: features.ndviMax,
+        };
+      }
+    }
+    if (sarRes) {
+      const sarEvents = detectSAREvents(sarRes);
+      if (sarEvents) {
+        sarSummary = {
+          harvestDate: sarEvents.summary.harvestEvent?.date ?? null,
+          harvestConfidence: sarEvents.summary.harvestEvent?.confidence,
+          inactivity: sarEvents.summary.inactivity,
+          vhSeasonStdevDb: sarEvents.summary.vhSeasonStdevDb,
+          tillageEventsCount: sarEvents.summary.tillageEvents.length,
+        };
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <nav className="text-xs text-foreground/60">
@@ -409,7 +449,7 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
             {stored.map((a) => {
               const decl = a.cropDeclaration;
               const warnings = decl
-                ? sortBySeverity(checkUserApplication(a, firstField, seasonMeteo ?? undefined))
+                ? sortBySeverity(checkUserApplication(a, firstField, seasonMeteo ?? undefined, ndviSummary, sarSummary))
                 : [];
               const sevWeight: Record<CheckSeverity, number> = { critical: 4, high: 3, warn: 2, info: 1, ok: 0 };
               const topSev = warnings.reduce<CheckSeverity>(

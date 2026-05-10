@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, real, date, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
@@ -32,7 +32,32 @@ export const applications = pgTable(
   })
 );
 
+// SAR/NDVI наблюдения по полигону — кеш Sentinel Hub Statistical API.
+// Заполняется по запросу на просмотр досье + батчем через /api/satellite/sar/refresh.
+// fieldKey = sha1 от полигона (стабильный идентификатор геометрии без БД-foreign-key
+// на users.fields[], которые лежат в JSON).
+export const fieldSarObservations = pgTable(
+  "field_sar_observations",
+  {
+    id: text("id").primaryKey(),                     // {fieldKey}|{date}|{source}
+    fieldKey: text("field_key").notNull(),
+    observationDate: date("observation_date").notNull(),
+    source: text("source").notNull(),                // 's1_grd' | 's2_ndvi' (future-proof)
+    vvDb: real("vv_db"),                              // Sentinel-1 VV backscatter в дБ
+    vhDb: real("vh_db"),                              // Sentinel-1 VH backscatter в дБ
+    ndvi: real("ndvi"),                               // оставляем для будущей миграции NDVI в БД
+    sampleCount: integer("sample_count"),             // сколько пикселей участвовало в усреднении
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    fieldIdx: index("sar_obs_field_idx").on(t.fieldKey, t.observationDate),
+    uniqObs: uniqueIndex("sar_obs_uniq").on(t.fieldKey, t.observationDate, t.source),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationInsert = typeof applications.$inferInsert;
+export type FieldSarObservationRow = typeof fieldSarObservations.$inferSelect;
+export type FieldSarObservationInsert = typeof fieldSarObservations.$inferInsert;

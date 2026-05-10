@@ -19,6 +19,7 @@ import type {
   YearOverYear,
   NDVIFeatures,
 } from "@/lib/satellite/types";
+import type { SAREventsResult } from "@/lib/satellite/sar-events";
 import { Card, CardHeader, SourcePill } from "@/components/ui";
 import { SatelliteImageThumb } from "@/components/SatelliteImageThumb";
 
@@ -52,10 +53,12 @@ const VEG_LABEL: Record<string, string> = {
 interface Props {
   spatial: SatelliteVerification;
   inactivity: InactivityCheckResult;
+  // SAR-результат, если CDSE настроен и ряд получен. null/undefined = пропускаем.
+  sar?: SAREventsResult | null;
   className?: string;
 }
 
-export function SatelliteCard({ spatial, inactivity, className = "" }: Props) {
+export function SatelliteCard({ spatial, inactivity, sar, className = "" }: Props) {
   const f = spatial.features;
   const insufficient = spatial.status === "INSUFFICIENT_DATA";
 
@@ -102,6 +105,8 @@ export function SatelliteCard({ spatial, inactivity, className = "" }: Props) {
           {spatial.reasons.map((r, i) => <li key={i}>{r}</li>)}
         </ul>
       )}
+
+      {sar && <SARBlock sar={sar} />}
 
       <div className="border-t border-border-soft px-5 py-3 space-y-2">
         <div className="flex items-start justify-between flex-wrap gap-3">
@@ -167,8 +172,15 @@ function BasicGrid({
       <Stat label="Посев на спутнике" value={sowingDetected ? "виден" : "не виден"} accent={sowingDetected ? undefined : "high"} />
       <Stat label="Поле начало зеленеть" value={f.growthStartDate ?? "—"} sub="первая дата с активной вегетацией" />
       <Stat label="Самый зелёный день"   value={f.peakDate ?? "—"} sub="когда NDVI был максимален" />
+      <Stat
+        label="Событие уборки"
+        value={f.harvestDate ?? (f.harvestDetected === false && f.peakDate ? "не зафиксировано" : "—")}
+        sub={f.harvestDate
+          ? "NDVI после пика упал ниже 0.20"
+          : f.peakDate ? "пик был, но падения нет — поле не убрано?" : "нет данных"}
+        accent={f.peakDate && !f.harvestDetected ? "high" : undefined}
+      />
       <Stat label="Ясных снимков"     value={`${f.pointsUsed} / ${f.pointsUsed + f.pointsDropped}`} sub="(использовано / всего)" />
-      <Stat label="Под облаками"      value={`${f.pointsDropped}`} sub="отброшено из расчёта" />
     </div>
   );
 }
@@ -209,6 +221,70 @@ function ExtendedGrid({ f }: { f: NDVIFeatures }) {
       </div>
     </div>
   );
+}
+
+function SARBlock({ sar }: { sar: SAREventsResult }) {
+  const { summary, events } = sar;
+  const accent = summary.inactivity ? "bg-rose-50 border-rose-200 text-rose-900" : "bg-sky-50 border-sky-200 text-sky-900";
+  return (
+    <div className="border-t border-border-soft bg-muted/20 px-5 py-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-foreground/60">
+          Радарная проверка поля (Sentinel-1, всепогодная)
+        </div>
+        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${accent}`}>
+          {summary.inactivity ? "Поле не работало весь сезон" : "Зафиксированы агро-события"}
+        </span>
+      </div>
+      <div className="text-[12px] text-foreground/70 leading-relaxed">
+        <strong className="text-foreground/85">Что это:</strong> радар Sentinel-1 пробивает облака
+        и видит изменения поверхности поля. Резкое падение биомассы (VH) = уборка, всплеск шероховатости (VV) = вспашка.
+        Это независимый от NDVI канал, особенно полезен весной и при облачности.
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SmallStat
+          label="Главное событие уборки"
+          value={summary.harvestEvent?.date ?? "—"}
+          hint={summary.harvestEvent ? `confidence ${summary.harvestEvent.confidence.toFixed(2)}` : "падения биомассы не зафиксировано"}
+          accent={summary.harvestEvent ? undefined : "warn"}
+        />
+        <SmallStat
+          label="События вспашки"
+          value={`${summary.tillageEvents.length}`}
+          hint={summary.tillageEvents.length === 0 ? "нет всплесков шероховатости" : summary.tillageEvents.map((e) => e.date).join(", ")}
+          accent={summary.tillageEvents.length === 0 ? "warn" : undefined}
+        />
+        <SmallStat
+          label="σ VH за сезон"
+          value={summary.vhSeasonStdevDb !== null ? `${summary.vhSeasonStdevDb} дБ` : "—"}
+          hint={summary.inactivity ? "ниже порога 1.0 — поле спит" : "норма для активного поля"}
+          accent={summary.inactivity ? "warn" : undefined}
+        />
+        <SmallStat
+          label="Точек S1"
+          value={`${summary.pointsUsed}`}
+          hint="наблюдений в окне сезона"
+        />
+      </div>
+      {events.length > 0 && (
+        <details className="text-[11px] text-foreground/70">
+          <summary className="cursor-pointer select-none">Все события радара ({events.length})</summary>
+          <ul className="mt-1 space-y-0.5 ml-4 list-disc">
+            {events.map((e, i) => (
+              <li key={i}>
+                <span className="font-mono text-foreground/85">{e.date}</span> · {labelForKind(e.kind)} ·{" "}
+                <span className="text-foreground/60">{e.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function labelForKind(k: SAREventsResult["events"][number]["kind"]): string {
+  return k === "harvest" ? "уборка" : k === "tillage" ? "вспашка" : k === "sowing" ? "посев" : "поле спит";
 }
 
 function YoYBlock({ yoy, currentMax }: { yoy: YearOverYear; currentMax: number }) {

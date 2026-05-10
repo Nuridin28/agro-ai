@@ -41,6 +41,11 @@ export const SAT_THRESHOLDS = {
   GROWTH_RATE_LOW: 0.008,
   // YoY: падение пика NDVI на >0.20 vs. прошлый год без объяснения метео.
   YOY_NDVI_DROP: 0.20,
+  // Расхождение заявленной даты уборки и детектированной по NDVI.
+  // ≤ HARVEST_DATE_OK_DAYS — норма (учитывает шаг 5 дней Sentinel-2 + облачность),
+  // > HARVEST_DATE_MISMATCH_DAYS — флагуем как нарушение.
+  HARVEST_DATE_OK_DAYS: 15,
+  HARVEST_DATE_MISMATCH_DAYS: 30,
 } as const;
 
 function validPoints(series: NDVITimeseries): NDVIPoint[] {
@@ -110,15 +115,23 @@ export function computeFeatures(series: NDVITimeseries): NDVIFeatures | null {
   }
 
   // Длина сезона: от growth start до точки, в которой NDVI после пика
-  // снова падает ниже GROWTH_START_NDVI - 0.05.
+  // снова падает ниже GROWTH_START_NDVI - 0.05. Эту же точку считаем
+  // «событием уборки» — биомасса исчезла.
   let seasonLengthDays: number | null = null;
+  let harvestDate: string | null = null;
   if (growthStartDate && peakIdx >= 0) {
-    let endDate: string | null = null;
     for (let i = peakIdx + 1; i < valid.length; i++) {
-      if (valid[i].ndvi < SAT_THRESHOLDS.GROWTH_START_NDVI - 0.05) { endDate = valid[i].date; break; }
+      if (valid[i].ndvi < SAT_THRESHOLDS.GROWTH_START_NDVI - 0.05) {
+        harvestDate = valid[i].date;
+        break;
+      }
     }
-    if (endDate) seasonLengthDays = daysBetween(growthStartDate, endDate);
+    if (harvestDate) seasonLengthDays = daysBetween(growthStartDate, harvestDate);
   }
+  // harvestDetected: видели полный цикл «рост → пик → падение».
+  // Нужно: была вегетация, был пик, был спад. Если пика не было либо ряд
+  // обрезался до падения — не подтверждаем.
+  const harvestDetected = !!(growthStartDate && peakDate && harvestDate);
 
   return {
     ndviMean: +mean.toFixed(3),
@@ -133,6 +146,8 @@ export function computeFeatures(series: NDVITimeseries): NDVIFeatures | null {
     growthRateNdviPerDay,
     daysToPeak,
     seasonLengthDays,
+    harvestDate,
+    harvestDetected,
   };
 }
 

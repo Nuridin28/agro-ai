@@ -25,12 +25,33 @@ interface MeteoForCheck {
   soilWarmDate?: string | null;
 }
 
+// Сводка NDVI-ряда поля для проверки заявки. Прокидывается из спутникового
+// модуля. Опционально — без NDVI просто пропускаем NDVI-проверки.
+export interface NDVISummaryForCheck {
+  harvestDate?: string | null;       // дата, на которую NDVI после пика упал ниже порога
+  harvestDetected?: boolean;          // удалось ли увидеть полный цикл рост → пик → падение
+  peakDate?: string | null;          // дата пика NDVI
+  ndviMax?: number | null;
+}
+
+// Сводка SAR-ряда (Sentinel-1) — параллельный канал к NDVI, не зависит
+// от облачности. null/undefined если CDSE не настроен.
+export interface SARSummaryForCheck {
+  harvestDate?: string | null;        // дата падения VH после пика
+  harvestConfidence?: number;          // 0..1
+  inactivity?: boolean;                // поле спит весь сезон по σ VH
+  vhSeasonStdevDb?: number | null;
+  tillageEventsCount?: number;
+}
+
 // Запускает все доступные правила. Если декларации нет (категория не зерновая
 // или фермер не заполнил поля) — возвращает пустой массив.
 export function checkUserApplication(
   app: StoredApplication,
   userField: UserField | undefined,
   meteo: MeteoForCheck | undefined,
+  ndvi?: NDVISummaryForCheck,
+  sar?: SARSummaryForCheck,
 ): CheckWarning[] {
   const decl = app.cropDeclaration;
   if (!decl) return [];
@@ -114,6 +135,76 @@ export function checkUserApplication(
     });
   }
 
+  // 6) NDVI-события: расхождение заявленной даты уборки с детектированной
+  // по NDVI, и «уборка вообще не зафиксирована». Подключается только если
+  // спутниковая сводка передана (есть полигон + есть ряд).
+  if (ndvi) {
+    if (decl.declaredHarvestDate && ndvi.harvestDate) {
+      const dDecl = new Date(`${decl.declaredHarvestDate}T00:00:00Z`).getTime();
+      const dObs  = new Date(`${ndvi.harvestDate}T00:00:00Z`).getTime();
+      const diffDays = Math.round((dObs - dDecl) / 86_400_000);
+      const absDays = Math.abs(diffDays);
+      // > 30 дн. — фрод-сигнал, > 15 дн. — мягкое предупреждение
+      if (absDays > 30) {
+        const direction = diffDays > 0 ? "позже" : "раньше";
+        out.push({
+          code: "CROP_HARVEST_DATE_MISMATCH",
+          severity: "high",
+          title: "Заявленная дата уборки расходится со спутником",
+          detail: `По заявке уборка ${decl.declaredHarvestDate}, спутник зафиксировал падение NDVI ниже порога только ${ndvi.harvestDate} (${absDays} дн. ${direction}). Типичный признак «бумажной» уборки — заявка раньше факта.`,
+        });
+      } else if (absDays > 15) {
+        out.push({
+          code: "CROP_HARVEST_DATE_DRIFT",
+          severity: "warn",
+          title: "Дата уборки слегка расходится со спутником",
+          detail: `По заявке уборка ${decl.declaredHarvestDate}, по NDVI — ${ndvi.harvestDate} (${absDays} дн.). Расхождение в пределах ${absDays}–30 дн. может быть объяснено облачностью; проверить вручную.`,
+        });
+      }
+    }
+    // Полный цикл не закрылся: NDVI поднимался выше порога вегетации,
+    // но падение биомассы в окне сезона так и не наблюдалось. Поле может
+    // быть не убрано, либо посева/уборки вообще не было.
+    if (ndvi.ndviMax != null && ndvi.ndviMax >= 0.30 && ndvi.harvestDetected === false) {
+      out.push({
+        code: "CROP_NO_HARVEST_DETECTED",
+        severity: "warn",
+        title: "Уборка не подтверждена снимками",
+        detail: `Пик NDVI на поле был зафиксирован${ndvi.peakDate ? ` ${ndvi.peakDate}` : ""}, однако падения биомассы ниже порога ${0.20} до конца сезона не наблюдалось. Возможные причины: уборка не проведена, либо поле осталось под зелёнкой как пар/корм.`,
+      });
+    }
+  }
+
+  // 7) SAR-канал (Sentinel-1) — независим от облачности. Применяется, если
+  // у фермера есть полигон и CDSE-провайдер настроен; иначе sar = undefined
+  // и блок просто пропускается.
+  if (sar) {
+    // Поле спит — самый сильный SAR-сигнал. Перебивает NDVI-неоднозначности.
+    if (sar.inactivity) {
+      out.push({
+        code: "CROP_SAR_FIELD_INACTIVE",
+        severity: "high",
+        title: "SAR: поле не работало весь сезон",
+        detail: `Sentinel-1 не зафиксировал значимых изменений biomass-сигнала (σ VH = ${sar.vhSeasonStdevDb ?? "—"} дБ при пороге 1.0 дБ). Заявка на ${CROP_LABEL[decl.crop]} с урожаем ${decl.declaredYieldCha} ц/га не подтверждается радаром — радар видит, что поле не работало.`,
+      });
+    }
+    // Расхождение даты уборки по SAR.
+    if (decl.declaredHarvestDate && sar.harvestDate) {
+      const dDecl = new Date(`${decl.declaredHarvestDate}T00:00:00Z`).getTime();
+      const dObs  = new Date(`${sar.harvestDate}T00:00:00Z`).getTime();
+      const diffDays = Math.round((dObs - dDecl) / 86_400_000);
+      if (Math.abs(diffDays) > 30) {
+        const direction = diffDays > 0 ? "позже" : "раньше";
+        out.push({
+          code: "CROP_SAR_HARVEST_MISMATCH",
+          severity: "high",
+          title: "SAR: дата уборки расходится с заявленной",
+          detail: `Радар Sentinel-1 зафиксировал падение VH ${sar.harvestDate} (confidence ${(sar.harvestConfidence ?? 0).toFixed(2)}), фермер заявил уборку ${decl.declaredHarvestDate} (${Math.abs(diffDays)} дн. ${direction}). Радар не зависит от облачности — это надёжнее NDVI.`,
+        });
+      }
+    }
+  }
+
   return out;
 }
 
@@ -125,5 +216,6 @@ export function sortBySeverity(arr: CheckWarning[]): CheckWarning[] {
 
 // Сериализатор decl → readable строка для UI.
 export function declarationToText(decl: CropDeclaration): string {
-  return `${CROP_LABEL[decl.crop]} · ${decl.areaHa} га · ${decl.declaredYieldCha} ц/га · ${decl.fertilizerKgHa} кг/га NPK · посев ${decl.declaredSowingDate}`;
+  const base = `${CROP_LABEL[decl.crop]} · ${decl.areaHa} га · ${decl.declaredYieldCha} ц/га · ${decl.fertilizerKgHa} кг/га NPK · посев ${decl.declaredSowingDate}`;
+  return decl.declaredHarvestDate ? `${base} · уборка ${decl.declaredHarvestDate}` : base;
 }

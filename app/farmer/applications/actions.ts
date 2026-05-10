@@ -55,6 +55,7 @@ export async function submitApplication(_prev: SubmitApplicationResult | null, f
     const declaredYield = Number(String(formData.get("declared_yield") ?? "0").replace(/\s+/g, "").replace(/,/g, "."));
     const fertKgHa = Number(String(formData.get("fert_kg_ha") ?? "0").replace(/\s+/g, "").replace(/,/g, "."));
     const sowingDate = String(formData.get("sowing_date") ?? "");
+    const harvestDateRaw = String(formData.get("harvest_date") ?? "").trim();
     if (!ALLOWED_CROPS.includes(crop)) {
       return { ok: false, error: "Выберите культуру (пшеница, ячмень, овёс и т.д.)" };
     }
@@ -67,7 +68,7 @@ export async function submitApplication(_prev: SubmitApplicationResult | null, f
     // Биологический потолок: declared > 1.6× от эталона культуры (без поправок) — фрод-флаг сразу.
     const baseYield = CROP_NORMS[crop].baseYieldCentnersHa;
     if (declaredYield > baseYield * 1.6) {
-      return { ok: false, error: `Заявленная урожайность ${declaredYield} ц/га нереалистична для культуры (биологический потолок ≈ ${baseYield} ц/га). Уточните цифры.` };
+      return { ok: false, error: `Заявленная урожайность ${declaredYield} ц/га нереалистична для культуры (биологический потолок ≈ ${baseYield} ç/га). Уточните цифры.` };
     }
     if (!Number.isFinite(fertKgHa) || fertKgHa < 0 || fertKgHa > 1000) {
       return { ok: false, error: "Норма внесения удобрений должна быть от 0 до 1000 кг/га" };
@@ -75,7 +76,19 @@ export async function submitApplication(_prev: SubmitApplicationResult | null, f
     if (!ISO_DATE.test(sowingDate)) {
       return { ok: false, error: "Укажите дату посева в формате YYYY-MM-DD" };
     }
-    cropDeclaration = { crop, areaHa, declaredYieldCha: declaredYield, fertilizerKgHa: fertKgHa, declaredSowingDate: sowingDate };
+    // declaredHarvestDate — опционально. Проверяем формат только если задана,
+    // и что она позже посева (иначе явная ошибка ввода).
+    let declaredHarvestDate: string | undefined;
+    if (harvestDateRaw) {
+      if (!ISO_DATE.test(harvestDateRaw)) {
+        return { ok: false, error: "Дата уборки — в формате YYYY-MM-DD" };
+      }
+      if (harvestDateRaw <= sowingDate) {
+        return { ok: false, error: "Дата уборки должна быть позже даты посева" };
+      }
+      declaredHarvestDate = harvestDateRaw;
+    }
+    cropDeclaration = { crop, areaHa, declaredYieldCha: declaredYield, fertilizerKgHa: fertKgHa, declaredSowingDate: sowingDate, declaredHarvestDate };
   }
 
   // Резолвим фермера через session (поддерживает демо + реальных пользователей).
