@@ -62,9 +62,21 @@ export async function POST(req: NextRequest) {
   // пользователь откроется в инспекторском досье, точки уже будут в БД.
   // Только если есть полигоны и SAR настроен.
   if (isSARConfigured()) {
-    const polygons: FieldPolygon[] = (user.fields ?? [])
-      .map((f) => f.polygon4326)
-      .filter((p): p is number[][] => Array.isArray(p) && p.length >= 4) as FieldPolygon[];
+    // Прогреваем КАЖДЫЙ parcel — пользователь может зарегистрировать хозяйство
+    // с 5-30 участками, спутник нужен по всем (или по тем, что инспектор
+    // потом откроет через UI lazy-кнопку).
+    const polygons: FieldPolygon[] = [];
+    for (const f of user.fields ?? []) {
+      for (const p of f.parcels ?? []) {
+        if (p.polygon4326 && p.polygon4326.length >= 4) {
+          polygons.push(p.polygon4326 as FieldPolygon);
+        }
+      }
+      // legacy fallback
+      if ((!f.parcels || f.parcels.length === 0) && f.polygon4326 && f.polygon4326.length >= 4) {
+        polygons.push(f.polygon4326 as FieldPolygon);
+      }
+    }
     if (polygons.length > 0) {
       const now = new Date();
       const seasonYear = now.getUTCMonth() >= 9 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;

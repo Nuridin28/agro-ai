@@ -24,23 +24,33 @@ import { checkUserApplication, sortBySeverity, declarationToText, type CheckSeve
 import { fetchSeason } from "@/lib/real-meteo";
 import { getSatelliteProvider } from "@/lib/satellite";
 import { computeFeatures } from "@/lib/satellite/ndvi";
-import { getSAREvents, isSARConfigured } from "@/lib/satellite/sar";
+import { getSAREvents, isSARConfigured, polygonKey } from "@/lib/satellite/sar";
 import { polygonAreaHa, polygonBboxDims } from "@/lib/satellite/geo";
+import { db } from "@/lib/db";
+import { fieldCoherenceJobs } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
 export function generateStaticParams() {
   return FARMERS.map((f) => ({ id: f.id }));
 }
 
-export default async function FarmerPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FarmerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ sat?: string }>;
+}) {
   const { id } = await params;
+  const { sat } = await searchParams;
 
   // Реальный пользователь: id вида "U-xxxxxxxx". У него нет мок-полей/сезонов/
   // verdict, зато есть привязки Гипрозема и поданные через форму заявки.
   if (id.startsWith("U-")) {
     const user = await findUserById(id.slice(2));
     if (!user) notFound();
-    return <RealUserPage user={user} farmerId={id} />;
+    return <RealUserPage user={user} farmerId={id} satParam={sat} />;
   }
 
   const farmer = findFarmer(id);
@@ -319,12 +329,26 @@ export default async function FarmerPage({ params }: { params: Promise<{ id: str
 //  - polygon4326 (если сохранён при регистрации) для NDVI-мониторинга
 //  - centroid слоя Гипрозема для реального метео через Open-Meteo
 // ────────────────────────────────────────────────────────────────────────────
-async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }) {
+async function RealUserPage({ user, farmerId, satParam }: { user: User; farmerId: string; satParam?: string }) {
   const stored = await getStoredApplicationsFor(farmerId);
   const totalRequested = stored.reduce((s, a) => s + a.amount, 0);
   const firstField = user.fields[0];
   const oblast = firstField ? OBLAST_NAMES[firstField.oblastCode] ?? "—" : "—";
   const layer = firstField ? findLayer(firstField.layerId) : null;
+
+  // Парсим ?sat=fi:pi — индексы UserField и Parcel внутри неё. Это значит,
+  // что инспектор нажал «Посмотреть со спутника» именно для этого parcel'а.
+  // Только тогда фетчим NDVI/SAR/Coherence. Без этого параметра — никаких
+  // спутниковых запросов на странице (lazy-загрузка).
+  let activeParcel: { fi: number; pi: number; polygon: FieldPolygon } | null = null;
+  if (satParam && /^\d+:\d+$/.test(satParam)) {
+    const [fi, pi] = satParam.split(":").map(Number);
+    const field = user.fields[fi];
+    const parcel = field?.parcels?.[pi];
+    if (parcel?.polygon4326 && parcel.polygon4326.length >= 4) {
+      activeParcel = { fi, pi, polygon: parcel.polygon4326 as FieldPolygon };
+    }
+  }
   // Сезон для NDVI/метео. ВСЕГДА используем «последний завершённый сезон»:
   // если сейчас до октября — текущая вегетация ещё в разгаре или не началась,
   // у Sentinel-2 в архиве нет полного ряда снимков → показываем прошлый год.
@@ -339,50 +363,26 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
     ? await fetchSeason(layer.centroid[0], layer.centroid[1], seasonYear).catch(() => null)
     : null;
 
-  // Полигон поля для спутниковой проверки. Приоритет:
-  //  1) сохранённый при регистрации polygon4326 — точный контур поля
-  //  2) фолбэк для старых юзеров: квадрат 3×3 км вокруг центра района Гипрозема
-  //     (хуже точностью, но даёт инспектору хоть какой-то снимок региона)
-  let polygon: FieldPolygon | null = null;
-  let polygonIsApproximate = false;
-  if (firstField?.polygon4326 && firstField.polygon4326.length >= 4) {
-    polygon = firstField.polygon4326 as FieldPolygon;
-  } else if (layer) {
-    // halfDeg ~ 0.015° ≈ 1.5–1.7 км в северном Казахстане
-    const [lat, lng] = layer.centroid;
-    const h = 0.015;
-    polygon = [
-      [lng - h, lat - h],
-      [lng + h, lat - h],
-      [lng + h, lat + h],
-      [lng - h, lat + h],
-      [lng - h, lat - h],
-    ];
-    polygonIsApproximate = true;
-  }
   // Baseline для спутниковой проверки. ВАЖНО: должен попадать в seasonYear,
   // иначе мы сравниваем декларацию одного года с NDVI другого года.
-  // Берём sowing_date только если фермер заявил посев в seasonYear; иначе
-  // используем середину мая (типичный посев яровых в северном Казахстане).
   const seasonDecl = stored.find(
     (a) => a.cropDeclaration?.declaredSowingDate?.startsWith(`${seasonYear}-`),
   )?.cropDeclaration?.declaredSowingDate;
   const baselineDate = seasonDecl ?? `${seasonYear}-05-15`;
-  // Если фермер декларировал посев именно за seasonYear — есть смысл
-  // сравнивать спутник с заявкой; иначе показываем NDVI как информационный
-  // профиль поля, без late_growth-проверки.
   const useDeclForCheck = !!seasonDecl;
 
-  // NDVI и SAR-сводки для проверки заявок. Тянем параллельно — оба запроса
-  // идут к Sentinel Hub-совместимым API, но к разным провайдерам.
+  // NDVI и SAR-сводки. Фетчим ТОЛЬКО если инспектор открыл конкретный parcel
+  // через ?sat=fi:pi. Без активного parcel'а — спутник не дёргается, страница
+  // грузится мгновенно. Прежнее поведение «авто-фетч для firstField»
+  // удалено по требованию lazy-загрузки.
   let ndviSummary: NDVISummaryForCheck | undefined;
   let sarSummary: SARSummaryForCheck | undefined;
-  if (polygon && !polygonIsApproximate) {
+  if (activeParcel) {
     const startDate = `${seasonYear}-04-01`;
     const endDate   = `${seasonYear}-10-15`;
     const [ndviRes, sarEvents] = await Promise.all([
-      getSatelliteProvider().getNDVITimeseries(polygon, startDate, endDate).catch(() => null),
-      isSARConfigured() ? getSAREvents(polygon, startDate, endDate).catch(() => null) : Promise.resolve(null),
+      getSatelliteProvider().getNDVITimeseries(activeParcel.polygon, startDate, endDate).catch(() => null),
+      isSARConfigured() ? getSAREvents(activeParcel.polygon, startDate, endDate).catch(() => null) : Promise.resolve(null),
     ]);
     if (ndviRes) {
       const features = computeFeatures(ndviRes);
@@ -435,9 +435,13 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
             <Mini
               label="Общая площадь"
               value={(() => {
-                const totalHa = user.fields.reduce((s, f) => {
-                  if (!f.polygon4326 || f.polygon4326.length < 4) return s;
-                  return s + polygonAreaHa(f.polygon4326 as FieldPolygon);
+                const totalHa = user.fields.reduce((sum, f) => {
+                  for (const p of f.parcels ?? []) {
+                    if (p.polygon4326 && p.polygon4326.length >= 4) {
+                      sum += polygonAreaHa(p.polygon4326 as FieldPolygon);
+                    }
+                  }
+                  return sum;
                 }, 0);
                 return totalHa > 0 ? `${totalHa.toFixed(1)} га` : "—";
               })()}
@@ -523,73 +527,25 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
         </Suspense>
       )}
 
-      {polygon ? (
-        <>
-          {polygonIsApproximate && (
-            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl px-5 py-3 text-xs text-amber-900">
-              <strong>Приблизительный контур.</strong> Полигон поля не был сохранён при регистрации — показываем
-              снимки квадрата 3×3 км вокруг центра района{layer ? ` ${layer.name}` : ""}. Для точной проверки
-              перерегистрируйте хозяйство, чтобы прикрепить настоящий контур поля.
-            </div>
-          )}
-          <Suspense fallback={<SatelliteCardSkeleton />}>
-            <SatelliteSection
-              polygon={polygon}
-              baselineDate={baselineDate}
-              year={seasonYear}
-              checkAgainstDeclaration={useDeclForCheck && !polygonIsApproximate}
-            />
-          </Suspense>
-        </>
-      ) : (
-        <Card className="p-5 bg-amber-50/50 border-amber-200">
-          <div className="text-sm font-semibold text-amber-900">Спутниковая проверка недоступна</div>
-          <div className="text-xs text-amber-900/80 mt-1">
-            У хозяйства нет ни сохранённого контура поля, ни привязки к району Гипрозема.
-            Перерегистрируйте хозяйство через Гипрозем, чтобы открыть NDVI-мониторинг.
-          </div>
-        </Card>
-      )}
-
       {user.fields.length > 0 ? (
         <Card>
-          <CardHeader title={`Привязки Гипрозема · ${user.fields.length}`} subtitle="Хозяйства и участки, прикреплённые при регистрации. Площадь рассчитана геодезически из контура polygon4326." />
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-foreground/60 bg-muted/60 text-left">
-                <tr>
-                  <th className="px-5 py-2 font-medium">Название хозяйства</th>
-                  <th className="px-3 py-2 font-medium">Слой Гипрозема</th>
-                  <th className="px-3 py-2 font-medium text-right">Участков</th>
-                  <th className="px-3 py-2 font-medium text-right">Площадь</th>
-                  <th className="px-3 py-2 font-medium text-right">Габариты</th>
-                  <th className="px-3 py-2 font-medium text-right">Гумус %</th>
-                  <th className="px-3 py-2 font-medium text-right">P мг/кг</th>
-                  <th className="px-3 py-2 font-medium text-right">N мг/кг</th>
-                  <th className="px-3 py-2 font-medium text-right">K мг/кг</th>
-                </tr>
-              </thead>
-              <tbody>
-                {user.fields.map((f, i) => {
-                  const poly = f.polygon4326 && f.polygon4326.length >= 4 ? (f.polygon4326 as FieldPolygon) : null;
-                  const areaHa = poly ? polygonAreaHa(poly) : null;
-                  const bbox = poly ? polygonBboxDims(poly) : null;
-                  return (
-                    <tr key={i} className="border-t border-border align-top">
-                      <td className="px-5 py-3 font-medium">{f.nazvxoz}</td>
-                      <td className="px-3 py-3 font-mono text-xs">{f.layerName}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{f.parcels}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{areaHa !== null ? `${areaHa.toFixed(1)} га` : "—"}</td>
-                      <td className="px-3 py-3 text-right tabular-nums text-foreground/70">{bbox ? `${Math.round(bbox.widthM)}×${Math.round(bbox.heightM)} м` : "—"}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.gum ?? "—"}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.p ?? "—"}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.n ?? "—"}</td>
-                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.k ?? "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <CardHeader
+            title={`Поля фермера · ${user.fields.reduce((s, f) => s + (f.parcels?.length ?? 0), 0)}`}
+            subtitle="Все участки хозяйств, прикреплённые при регистрации. Площадь — геодезически из polygon4326. «Посмотреть со спутника» дёргает NDVI/SAR/Coherence по конкретному участку (не на все сразу)."
+          />
+          <div className="p-4 space-y-5">
+            {user.fields.map((f, fi) => (
+              <FieldGroupCard
+                key={fi}
+                fi={fi}
+                field={f}
+                farmerId={farmerId}
+                activeParcelIdx={activeParcel?.fi === fi ? activeParcel.pi : null}
+                activeParcelBaseline={activeParcel?.fi === fi ? baselineDate : undefined}
+                activeParcelYear={seasonYear}
+                checkAgainstDeclaration={useDeclForCheck}
+              />
+            ))}
           </div>
         </Card>
       ) : (
@@ -663,5 +619,180 @@ function DList({ rows }: { rows: [string, React.ReactNode, any][] }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Карточка одной привязки Гипрозема (одно хозяйство в одном районе). Внутри —
+// список всех parcel'ов (реальных участков), каждый со своими координатами,
+// площадью и кнопкой «Посмотреть со спутника» (LazySatelliteButton).
+// ────────────────────────────────────────────────────────────────────────────
+function FieldGroupCard({
+  fi,
+  field,
+  farmerId,
+  activeParcelIdx,
+  activeParcelBaseline,
+  activeParcelYear,
+  checkAgainstDeclaration,
+}: {
+  fi: number;
+  field: import("@/lib/users-store").UserField;
+  farmerId: string;
+  activeParcelIdx: number | null;
+  activeParcelBaseline?: string;
+  activeParcelYear: number;
+  checkAgainstDeclaration: boolean;
+}) {
+  const parcels = field.parcels ?? [];
+  return (
+    <div className="border border-border-soft rounded-xl bg-muted/20">
+      <div className="px-5 py-3 border-b border-border-soft flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div className="font-medium">{field.nazvxoz}</div>
+          <div className="text-[11px] text-foreground/60 mt-0.5">
+            Слой <span className="font-mono">{field.layerName}</span> ·
+            оба́ласть {field.oblastCode} · участков {parcels.length}
+          </div>
+        </div>
+        <div className="text-[11px] text-foreground/70 font-mono">
+          гумус {field.sample?.gum ?? "—"} · P {field.sample?.p ?? "—"} ·
+          N {field.sample?.n ?? "—"} · K {field.sample?.k ?? "—"}
+        </div>
+      </div>
+      <div className="divide-y divide-border-soft">
+        {parcels.length === 0 ? (
+          <div className="px-5 py-3 text-xs text-foreground/60">
+            Контуры участков не сохранились при регистрации (старая запись).
+            Перерегистрируйте хозяйство — мы подтянем все parcel-ы из Гипрозема.
+          </div>
+        ) : (
+          parcels.map((p, pi) => (
+            <ParcelRow
+              key={pi}
+              fi={fi}
+              pi={pi}
+              parcel={p}
+              farmerId={farmerId}
+              isActive={activeParcelIdx === pi}
+              baselineDate={activeParcelBaseline}
+              year={activeParcelYear}
+              checkAgainstDeclaration={checkAgainstDeclaration}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+async function ParcelRow({
+  fi,
+  pi,
+  parcel,
+  farmerId,
+  isActive,
+  baselineDate,
+  year,
+  checkAgainstDeclaration,
+}: {
+  fi: number;
+  pi: number;
+  parcel: import("@/lib/users-store").Parcel;
+  farmerId: string;
+  isActive: boolean;
+  baselineDate?: string;
+  year: number;
+  checkAgainstDeclaration: boolean;
+}) {
+  const polygon = parcel.polygon4326 as FieldPolygon;
+  const areaHa = polygonAreaHa(polygon);
+  const bbox = polygonBboxDims(polygon);
+  // Центроид (для отображения координат) — простое среднее.
+  let sumLng = 0, sumLat = 0;
+  for (const [lng, lat] of polygon) { sumLng += lng; sumLat += lat; }
+  const cLng = sumLng / polygon.length;
+  const cLat = sumLat / polygon.length;
+
+  // Статус HyP3-джобов для этого parcel'а (по fieldKey). Считаем сколько в
+  // обработке (PENDING/RUNNING) и сколько готово (DONE) — показываем
+  // инспектору, что Coherence обрабатывается в фоне.
+  const fieldKey = polygonKey(polygon);
+  const jobs = await db
+    .select({ status: fieldCoherenceJobs.status })
+    .from(fieldCoherenceJobs)
+    .where(eq(fieldCoherenceJobs.fieldKey, fieldKey))
+    .catch(() => [] as { status: string }[]);
+  const jobCounts = jobs.reduce<Record<string, number>>((acc, j) => {
+    acc[j.status] = (acc[j.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  const inProgress = (jobCounts.PENDING ?? 0) + (jobCounts.RUNNING ?? 0);
+  const ready = (jobCounts.DONE ?? 0);
+
+  return (
+    <div className="px-5 py-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="text-sm">
+          <div className="font-medium flex items-center gap-2 flex-wrap">
+            Участок №{pi + 1}
+            {parcel.cadastralNumber && (
+              <span className="text-[11px] font-mono text-foreground/60">
+                кад. {parcel.cadastralNumber}
+              </span>
+            )}
+            {inProgress > 0 && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-sky-50 border-sky-200 text-sky-900">
+                ⏳ Coherence: {inProgress} в обработке
+              </span>
+            )}
+            {ready > 0 && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-900">
+                ✓ Coherence готов: {ready}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-foreground/65 mt-0.5 font-mono">
+            {areaHa.toFixed(1)} га · {Math.round(bbox.widthM)}×{Math.round(bbox.heightM)} м ·
+            центр {cLat.toFixed(4)}°N, {cLng.toFixed(4)}°E
+          </div>
+          {parcel.sample && (parcel.sample.gum != null || parcel.sample.p != null) && (
+            <div className="text-[11px] text-foreground/65 mt-0.5">
+              per-parcel агрохимия: гумус {parcel.sample.gum ?? "—"} · P {parcel.sample.p ?? "—"} ·
+              N {parcel.sample.n ?? "—"} · K {parcel.sample.k ?? "—"}
+            </div>
+          )}
+        </div>
+        <div>
+          {isActive ? (
+            <Link
+              href={`/inspector/farmers/${farmerId}`}
+              className="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded border border-accent/40 bg-accent/10 text-accent"
+            >
+              ✕ Закрыть спутник
+            </Link>
+          ) : (
+            <Link
+              href={`/inspector/farmers/${farmerId}?sat=${fi}:${pi}`}
+              className="text-[11px] inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-border bg-card hover:border-accent hover:bg-accent/5 transition"
+            >
+              ▶ Посмотреть со спутника
+            </Link>
+          )}
+        </div>
+      </div>
+      {isActive && baselineDate && (
+        <div className="mt-3">
+          <Suspense fallback={<SatelliteCardSkeleton />}>
+            <SatelliteSection
+              polygon={polygon}
+              baselineDate={baselineDate}
+              year={year}
+              checkAgainstDeclaration={checkAgainstDeclaration}
+            />
+          </Suspense>
+        </div>
+      )}
+    </div>
   );
 }

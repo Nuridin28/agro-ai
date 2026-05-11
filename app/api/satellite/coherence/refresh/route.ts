@@ -44,7 +44,19 @@ async function collectAllPolygons(): Promise<PolygonEntry[]> {
   }
   for (const u of await getAllUsers()) {
     for (const f of u.fields ?? []) {
-      if (f.polygon4326 && f.polygon4326.length >= 4) {
+      const parcels = f.parcels ?? [];
+      for (let pi = 0; pi < parcels.length; pi++) {
+        const p = parcels[pi];
+        if (p.polygon4326 && p.polygon4326.length >= 4) {
+          out.push({
+            fieldKey: polygonKey(p.polygon4326 as FieldPolygon),
+            ownerLabel: `${u.farmName} (${f.nazvxoz} #${pi + 1})`,
+            polygon: p.polygon4326 as FieldPolygon,
+          });
+        }
+      }
+      // Legacy fallback
+      if (parcels.length === 0 && f.polygon4326 && f.polygon4326.length >= 4) {
         out.push({
           fieldKey: polygonKey(f.polygon4326 as FieldPolygon),
           ownerLabel: `${u.farmName} (${f.nazvxoz})`,

@@ -4,13 +4,24 @@ import { db } from "./db";
 import { users } from "./db/schema";
 import type { GiprozemFeature } from "./giprozem";
 
+// Один participated участок (parcel) внутри Гипрозем-слоя. У хозяйства может
+// быть до десятков-сотен таких parcel'ов в одном районе. У каждого свой
+// контур, своя агрохимия (если Гипрозем отдал per-feature), свои координаты.
+export interface Parcel {
+  polygon4326: number[][];                              // outer ring [lng, lat][]
+  sample?: GiprozemFeature["attributes"];               // per-parcel агрохимия
+  cadastralNumber?: string;                              // если есть в attributes
+}
+
 export interface UserField {
   nazvxoz: string;
   layerId: number;
   layerName: string;
   oblastCode: string;
-  parcels: number;
-  sample: GiprozemFeature["attributes"];
+  parcels: Parcel[];                                    // ВСЕ участки хозяйства в районе
+  sample: GiprozemFeature["attributes"];                // агрегат для хозяйства-в-районе
+  // legacy-поле: один полигон (первый parcel) — оставлено для backward compat
+  // со старыми записями в БД. Новый код должен читать parcels[].
   polygon4326?: number[][];
 }
 
@@ -28,6 +39,31 @@ export interface User {
 
 type Row = typeof users.$inferSelect;
 
+// Конвертирует UserField старой схемы (parcels: number + один polygon4326)
+// в новую (parcels: Parcel[]). Идемпотентно — если уже массив, отдаём как есть.
+function normalizeUserField(f: unknown): UserField {
+  const raw = f as Partial<UserField> & { parcels?: number | Parcel[]; polygon4326?: number[][] };
+  // Уже новая схема
+  if (Array.isArray(raw.parcels)) {
+    return raw as UserField;
+  }
+  // Старая схема: parcels — число, есть один polygon4326. Создаём массив с
+  // одним parcel'ом (как минимум сохранится тот контур, что мы знали).
+  const legacyPolygon = raw.polygon4326;
+  const parcels: Parcel[] = legacyPolygon && legacyPolygon.length >= 4
+    ? [{ polygon4326: legacyPolygon, sample: raw.sample }]
+    : [];
+  return {
+    nazvxoz: raw.nazvxoz ?? "",
+    layerId: raw.layerId ?? 0,
+    layerName: raw.layerName ?? "",
+    oblastCode: raw.oblastCode ?? "",
+    parcels,
+    sample: raw.sample ?? ({} as GiprozemFeature["attributes"]),
+    polygon4326: raw.polygon4326,
+  };
+}
+
 function rowToUser(r: Row): User {
   return {
     id: r.id,
@@ -38,7 +74,7 @@ function rowToUser(r: Row): User {
     ownerFio: r.ownerFio ?? undefined,
     bin: r.bin ?? undefined,
     createdAt: r.createdAt.toISOString(),
-    fields: (r.fields as UserField[]) ?? [],
+    fields: ((r.fields as unknown[]) ?? []).map(normalizeUserField),
   };
 }
 

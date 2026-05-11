@@ -4,16 +4,23 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+interface MatchParcel {
+  polygon4326: number[][];
+  sample: { p?: number; gum?: number; yearob?: number; s?: number; n?: number; k?: number };
+  cadastralNumber?: string;
+}
+
 interface Match {
   nazvxoz: string;
   layerId: number;
   layerName: string;
   oblastCode: string;
   oblastName: string;
-  parcels: number;
+  // Все участки хозяйства в этом районе с их контурами.
+  parcels: MatchParcel[];
+  parcelsCount: number;
   sample: { p?: number; gum?: number; yearob?: number; s?: number };
-  // Полигон первого участка хозяйства в формате [lon, lat][] (EPSG:4326),
-  // используется спутниковой проверкой NDVI после регистрации.
+  // legacy: первый ring (для preview / fallback).
   polygon4326?: number[][] | null;
 }
 
@@ -80,7 +87,7 @@ export default function RegisterPage() {
       const cur = map.get(r.nazvxoz) ?? { nazvxoz: r.nazvxoz, oblasts: new Set<string>(), layers: 0, parcels: 0, rows: [] };
       cur.oblasts.add(r.oblastName);
       cur.layers += 1;
-      cur.parcels += r.parcels;
+      cur.parcels += r.parcelsCount;
       cur.rows.push(r);
       map.set(r.nazvxoz, cur);
     }
@@ -191,7 +198,7 @@ export default function RegisterPage() {
           layerId: m.layerId,
           layerName: m.layerName,
           oblastCode: m.oblastCode,
-          parcels: m.parcels,
+          parcels: m.parcels,           // массив parcel'ов с polygon-ами
           sample: m.sample,
           polygon4326: m.polygon4326 ?? undefined,
         }));
@@ -341,7 +348,7 @@ export default function RegisterPage() {
                     <div className="flex-1">
                       <div className="font-medium text-sm">{m.nazvxoz}</div>
                       <div className="text-xs text-foreground/60 mt-0.5">
-                        {m.oblastName} · слой <span className="font-mono">{m.layerName}</span> · {m.parcels} участок(ов)
+                        {m.oblastName} · слой <span className="font-mono">{m.layerName}</span> · {m.parcelsCount} участок(ов)
                       </div>
                       <div className="text-xs text-foreground/50 mt-1 font-mono">
                         обр. {m.sample?.yearob ?? "—"} · P={m.sample?.p ?? "—"} · гумус={m.sample?.gum ?? "—"} · {m.sample?.s ?? "—"} га

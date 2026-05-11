@@ -75,7 +75,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
               <div className="text-sm text-foreground-soft mt-0.5">{farmer.region.oblast}, {farmer.region.rayon}</div>
               {isReal && userFields.length > 0 && (
                 <div className="text-xs text-foreground/70 mt-2">
-                  Подключено: <strong>{userFields.length}</strong> хозяйств · {userFields.reduce((s, f) => s + f.parcels, 0)} полей
+                  Подключено: <strong>{userFields.length}</strong> хозяйств · {userFields.reduce((s, f) => s + (f.parcels?.length ?? 0), 0)} полей
                 </div>
               )}
             </div>
@@ -126,7 +126,7 @@ export default async function FarmerHomePage({ searchParams }: { searchParams: P
       {isReal && userFields.length > 0 && (
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <Stat icon={<IconBuilding size={14} />} label="Хозяйств" value={userFields.length} />
-          <Stat icon={<IconLayers size={14} />} label="Полей" value={userFields.reduce((s, f) => s + f.parcels, 0)} />
+          <Stat icon={<IconLayers size={14} />} label="Полей" value={userFields.reduce((s, f) => s + (f.parcels?.length ?? 0), 0)} />
           <Stat
             icon={<IconSprout size={14} />}
             label="Фосфор в почве"

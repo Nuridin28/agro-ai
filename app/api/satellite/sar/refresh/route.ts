@@ -26,10 +26,23 @@ async function collectAllPolygons(): Promise<FieldEntry[]> {
   for (const rec of allFieldPolygons()) {
     out.push({ ownerId: rec.farmerId, ownerLabel: rec.farmerId, polygon: rec.polygon });
   }
-  // Реальные юзеры U-xxx с сохранёнными контурами полей
+  // Реальные юзеры U-xxx — каждый parcel (реальный участок) отдельной записью.
   for (const u of await getAllUsers()) {
     for (const f of u.fields ?? []) {
-      if (f.polygon4326 && f.polygon4326.length >= 4) {
+      const parcels = f.parcels ?? [];
+      for (let pi = 0; pi < parcels.length; pi++) {
+        const p = parcels[pi];
+        if (p.polygon4326 && p.polygon4326.length >= 4) {
+          out.push({
+            ownerId: `U-${u.id}`,
+            ownerLabel: `${u.farmName} (${f.nazvxoz} #${pi + 1})`,
+            polygon: p.polygon4326 as FieldPolygon,
+          });
+        }
+      }
+      // Legacy-fallback: если новый parcels[] пустой, но есть старый
+      // polygon4326 на уровне UserField — используем его.
+      if (parcels.length === 0 && f.polygon4326 && f.polygon4326.length >= 4) {
         out.push({
           ownerId: `U-${u.id}`,
           ownerLabel: `${u.farmName} (${f.nazvxoz})`,

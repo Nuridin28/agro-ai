@@ -11,18 +11,26 @@ import { GIPROZEM_LAYERS, OBLAST_NAMES } from "@/lib/giprozem-catalog";
 // Поскольку API ArcGIS не делает cross-layer query, мы параллельно сканируем
 // все 172 слоя пакетами по 12 одновременных запросов.
 
+interface ParcelEntry {
+  polygon4326: number[][];
+  sample: any;
+  cadastralNumber?: string;
+}
+
 interface MatchAgg {
   nazvxoz: string;
   layerId: number;
   layerName: string;
   oblastCode: string;
   oblastName: string;
-  parcels: number;
-  sample: any;
-  // Полигон первого участка хозяйства в формате [lon, lat][] (EPSG:4326).
-  // Buildnamequery просили withGeometry=true и outSR=4326. Используется
-  // для спутниковой NDVI-проверки в досье real-юзера.
+  // Все участки хозяйства в этом районе. Каждый со своим контуром
+  // и (если Гипрозем отдал) per-feature агрохимией.
+  parcels: ParcelEntry[];
+  sample: any;            // агрегат — берётся из первого parcel'а
+  // legacy: для совместимости с прежним фронтендом оставляем первый ring
+  // и число участков.
   polygon4326?: number[][] | null;
+  parcelsCount: number;
 }
 
 const CONCURRENCY = 12;
@@ -57,26 +65,42 @@ export async function GET(req: NextRequest) {
         if (!name) continue;
         const key = `${name}::${layer.id}`;
         const ring = pickOuterRing(f.geometry);
-        if (!matches.has(key)) {
+        if (!ring) continue;  // без контура parcel смысла не имеет
+        const attrs = f.attributes as Record<string, unknown>;
+        const parcel: ParcelEntry = {
+          polygon4326: ring,
+          sample: f.attributes,
+          cadastralNumber: typeof attrs?.kadnomer === "string"
+            ? attrs.kadnomer
+            : typeof attrs?.cadnumber === "string"
+              ? attrs.cadnumber
+              : undefined,
+        };
+        const existing = matches.get(key);
+        if (!existing) {
           matches.set(key, {
             nazvxoz: name,
             layerId: layer.id,
             layerName: layer.name,
             oblastCode: layer.oblastCode,
             oblastName: OBLAST_NAMES[layer.oblastCode] ?? layer.oblastCode,
-            parcels: 1,
+            parcels: [parcel],
             sample: f.attributes,
             polygon4326: ring,
+            parcelsCount: 1,
           });
         } else {
-          matches.get(key)!.parcels++;
+          existing.parcels.push(parcel);
+          existing.parcelsCount++;
         }
       }
     } catch { /* skip layer */ }
     return true;
   });
 
-  const list = Array.from(matches.values()).sort((a, b) => b.parcels - a.parcels).slice(0, 25);
+  const list = Array.from(matches.values())
+    .sort((a, b) => b.parcelsCount - a.parcelsCount)
+    .slice(0, 25);
   return Response.json({
     matches: list,
     totalLayersScanned: GIPROZEM_LAYERS.length,

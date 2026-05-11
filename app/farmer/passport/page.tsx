@@ -42,7 +42,7 @@ export default async function PassportPage({ searchParams }: { searchParams: Pro
             <div className="min-w-0">
               <div className="text-xs uppercase tracking-wider text-foreground/60">Цифровой паспорт · ваши хозяйства из Гипрозема</div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight mt-1 wrap-break-word">{farmer.legalName}</h1>
-              <div className="text-sm text-foreground/70 mt-0.5">{userFields.length} привязок · {userFields.reduce((s, f) => s + f.parcels, 0)} участков</div>
+              <div className="text-sm text-foreground/70 mt-0.5">{userFields.length} привязок · {userFields.reduce((s, f) => s + (f.parcels?.length ?? 0), 0)} участков</div>
             </div>
             <LogoutButton />
           </div>
@@ -207,7 +207,7 @@ function RealFieldCard({ uf }: { uf: UserField }) {
     <Card>
       <CardHeader
         title={uf.nazvxoz}
-        subtitle={`${oblastName} · слой ${uf.layerName} · ${uf.parcels} участок(ов) · обследование ${a.yearob ?? "?"}`}
+        subtitle={`${oblastName} · слой ${uf.layerName} · ${uf.parcels?.length ?? 0} участок(ов) · обследование ${a.yearob ?? "?"}`}
         action={
           <Link href={`/giprozem?q=${encodeURIComponent(uf.nazvxoz)}`} className="text-xs text-accent underline">
             открыть в Гипрозем live →
