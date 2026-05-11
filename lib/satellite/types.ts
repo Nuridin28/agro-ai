@@ -184,6 +184,55 @@ export interface SARTimeseries {
 // агрономическое действие, привязанное к сильному изменению backscatter.
 export type SAREventKind = "harvest" | "tillage" | "sowing" | "inactivity";
 
+// ────────────────────────────────────────────────────────────────────────────
+// Coherence (CCD — interferometric coherence change detection)
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Coherence γ ∈ [0..1] измеряется между двумя SLC-снимками одной геометрии
+// (одна орбита, тот же angle). Высокая γ (≥0.5) = поверхность не менялась
+// между пролётами; низкая γ (<0.2) = что-то значимо изменилось — проехала
+// техника, прошла уборка, посев.
+//
+// Cadence: 6 или 12 дней (зависит от констелляции S1A/S1C на конкретной
+// дате). Поэтому ряд coherence — это пары (start, end), а не одиночные
+// наблюдения.
+export interface CoherencePair {
+  startDate: string;     // дата первого SLC (YYYY-MM-DD UTC)
+  endDate: string;       // дата второго SLC (обычно +6/+12 дн.)
+  coherence: number;     // среднее γ по полигону, 0..1
+  sampleCount: number;   // сколько пикселей участвовало
+  // Источник пары — для аудита и cross-check:
+  //   "hyp3"      = ASF HyP3 cloud-сервис (рекомендуется для прода)
+  //   "snap"      = локальный пайплайн SNAP/pyroSAR
+  //   "byoc"      = пред-вычисленный BYOC-датасет в Sentinel Hub
+  //   "mock"      = синтез для демо / тестов
+  source: "hyp3" | "snap" | "byoc" | "mock";
+}
+
+export interface CoherenceTimeseries {
+  polygon: FieldPolygon;
+  windowStart: string;
+  windowEnd: string;
+  pairs: CoherencePair[];
+  providerId: "hyp3" | "snap" | "byoc" | "mock";
+}
+
+// Событие изменения поверхности по coherence drop.
+export interface CoherenceEvent {
+  // Дата конца пары — момент, когда зафиксировано изменение.
+  date: string;
+  // Coherence до и после события (для аудита).
+  coherence: number;
+  // Тип события — определяется кросс-чеком с backscatter:
+  //   - падение γ + рост VV (rough) → tillage
+  //   - падение γ + падение VH (biomass loss) → harvest
+  //   - падение γ + рост VH → sowing
+  //   - падение γ без явного backscatter-сигнала → generic change
+  kind: "harvest" | "tillage" | "sowing" | "change";
+  confidence: number;
+  reason: string;
+}
+
 export interface SAREvent {
   kind: SAREventKind;
   date: string;             // YYYY-MM-DD

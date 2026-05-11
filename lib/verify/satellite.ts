@@ -10,6 +10,7 @@ import type { SatelliteVerification, InactivityCheckResult } from "../satellite/
 import { CROP_LABEL } from "../types";
 import { SAT_THRESHOLDS } from "../satellite/ndvi";
 import type { SAREventsResult } from "../satellite/sar-events";
+import type { CoherenceEventsResult } from "../satellite/coherence-events";
 
 function ev(label: string, value: string, sourceObj: Evidence["source"]): Evidence {
   return { label, value, source: sourceObj };
@@ -21,6 +22,7 @@ export interface SatelliteContext {
   spatial?: SatelliteVerification | null;
   inactivity?: InactivityCheckResult | null;
   sar?: SAREventsResult | null;
+  coherence?: CoherenceEventsResult | null;
 }
 
 export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
@@ -340,6 +342,82 @@ export function runSatelliteChecks(ctx: SatelliteContext): Finding[] {
         evidence: [
           ev("σ VH (сезон)",            `${sar.summary.vhSeasonStdevDb} дБ`,    sarSource),
           ev("Наблюдений S1",           `${sar.summary.pointsUsed}`,            sarSource),
+        ],
+      });
+    }
+  }
+
+  // ─── Coherence (CCD) ─────────────────────────────────────────────────────
+  // Если кross-channel настроен, добавляем findings по γ-событиям и
+  // triple-validation, когда все три канала согласуются.
+  if (ctx.coherence) {
+    const coh = ctx.coherence;
+    const cohSource: SourceRef = {
+      source: "AGRODATA",
+      docId: `CCD-S1-${season.year}-${season.farmerId}`,
+      fetchedAt: new Date().toISOString(),
+      note: `Sentinel-1 coherence · ${coh.summary.pairsCount} пар, mean γ=${coh.summary.meanGamma}`,
+    };
+
+    // Поле стабильно весь сезон — никаких изменений поверхности.
+    // Это самый сильный сигнал «поле не работало», сильнее чем σVH-флаг.
+    if (coh.summary.fieldStable) {
+      out.push({
+        code: "CROP_COHERENCE_FIELD_STABLE",
+        severity: "critical",
+        title: "Coherence: поле не менялось весь сезон",
+        detail: `Радарная coherence γ оставалась высокой (среднее ${coh.summary.meanGamma}, минимум ${coh.summary.minGamma}) — поверхность поля физически не изменялась между всеми ${coh.summary.pairsCount} парами снимков S1. Это означает, что на поле не было ни вспашки, ни посева, ни уборки. Заявленная деятельность не подтверждается ни одним физическим каналом.`,
+        expected: "γ < 0.3 хотя бы в одной паре окна работ",
+        actual:   `min γ = ${coh.summary.minGamma}, mean γ = ${coh.summary.meanGamma}`,
+        riskTenge: Math.round(season.subsidyTenge * 0.9),
+        evidence: [
+          ev("Средняя γ за сезон",   `${coh.summary.meanGamma}`,       cohSource),
+          ev("Минимум γ",             `${coh.summary.minGamma}`,        cohSource),
+          ev("Пар наблюдений S1",    `${coh.summary.pairsCount}`,      cohSource),
+        ],
+      });
+    } else if (coh.summary.primaryEvent) {
+      // Зафиксировано хотя бы одно событие изменения. Для отчётности
+      // выдаём info-finding с датой и confidence.
+      const e = coh.summary.primaryEvent;
+      out.push({
+        code: "CROP_COHERENCE_EVENT",
+        severity: "info",
+        title: `Coherence: зафиксировано изменение поверхности ${e.date}`,
+        detail: `Радарная γ упала до ${e.coherence.toFixed(2)} в окне до ${e.date} (confidence ${e.confidence.toFixed(2)}). ${e.reason}. Это означает, что на поле проходили механические работы — вспашка, посев или уборка.`,
+        evidence: [
+          ev("Дата события",   e.date,                                cohSource),
+          ev("γ при событии",  e.coherence.toFixed(2),                cohSource),
+          ev("Всего событий",  `${coh.events.length}`,                cohSource),
+        ],
+      });
+    }
+
+    // ─── Triple-validation: NDVI + SAR + Coherence ───────────────────────
+    // Если ВСЕ три канала независимо показали «поле не работало» — это
+    // самый высокий уровень уверенности.
+    const ndviInactive = ctx.spatial?.features
+      && ctx.spatial.features.vegetationPresent === false;
+    const sarInactive = ctx.sar?.summary.inactivity === true;
+    const cohStable = coh.summary.fieldStable;
+    if (ndviInactive && sarInactive && cohStable) {
+      // Убираем дубликаты, чтобы не считать риск трижды.
+      const dupCodes = new Set(["CROP_NO_VEGETATION", "CROP_SAR_FIELD_INACTIVE", "CROP_COHERENCE_FIELD_STABLE"]);
+      for (let i = out.length - 1; i >= 0; i--) {
+        if (dupCodes.has(out[i].code)) out.splice(i, 1);
+      }
+      out.push({
+        code: "CROP_TRIPLE_VALIDATED",
+        severity: "critical",
+        title: "Все три спутниковых канала согласны: поле не работало",
+        detail: `NDVI (оптика Sentinel-2) не обнаружил вегетации, SAR backscatter (Sentinel-1) σVH ниже порога 1.0 дБ, и interferometric coherence γ оставалась высокой весь сезон. Три физически независимых канала пришли к одному и тому же выводу — на поле в сезон ${season.year} не было ни посева, ни уборки. Это максимальная уверенность движка.`,
+        expected: "Хотя бы один канал должен показывать активность",
+        actual:   "Все три канала: inactive",
+        riskTenge: Math.round(season.subsidyTenge * 1.0),
+        evidence: [
+          ev("NDVI max",                 `${ctx.spatial?.features?.ndviMax ?? "—"}`, ctx.spatial?.source ?? cohSource),
+          ev("SAR σ VH",                 `${ctx.sar?.summary.vhSeasonStdevDb ?? "—"} дБ`, cohSource),
+          ev("Coherence mean γ",         `${coh.summary.meanGamma}`,                 cohSource),
         ],
       });
     }

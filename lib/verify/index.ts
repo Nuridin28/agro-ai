@@ -11,6 +11,8 @@ import { herdFor, pastureFor, bullsFor, saleDeclarationFor } from "../mock/lives
 import { polygonForFarmer } from "../mock/field-polygons";
 import { verifySatellite, checkInactivity } from "../satellite";
 import { getSAREvents, isSARConfigured } from "../satellite/sar";
+import { getCoherenceSeries, isCoherenceConfigured } from "../satellite/coherence";
+import { detectCoherenceEvents } from "../satellite/coherence-events";
 
 export { SEVERITY_WEIGHT };
 
@@ -121,7 +123,7 @@ export async function verifyFarmerWithSatellite(farmerId: string): Promise<Farme
   const endDate   = `${season.year}-09-30`;
   const baselineDate = season.declaredSowingDate;
 
-  const [spatial, inactivity, sar] = await Promise.all([
+  const [spatial, inactivity, sar, coherenceSeries] = await Promise.all([
     verifySatellite({
       polygon: polyRec.polygon,
       startDate, endDate,
@@ -137,9 +139,13 @@ export async function verifyFarmerWithSatellite(farmerId: string): Promise<Farme
     isSARConfigured()
       ? getSAREvents(polyRec.polygon, startDate, endDate).catch(() => null)
       : Promise.resolve(null),
+    isCoherenceConfigured()
+      ? getCoherenceSeries(polyRec.polygon, startDate, endDate).catch(() => null)
+      : Promise.resolve(null),
   ]);
+  const coherence = coherenceSeries ? detectCoherenceEvents(coherenceSeries) : null;
 
-  const satFindings = runSatelliteChecks({ field, season, spatial, inactivity, sar });
+  const satFindings = runSatelliteChecks({ field, season, spatial, inactivity, sar, coherence });
   if (satFindings.length === 0) return base;
 
   const findings = [...base.findings, ...satFindings];

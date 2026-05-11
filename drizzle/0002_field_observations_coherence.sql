@@ -1,0 +1,1 @@
+ALTER TABLE "field_sar_observations" ADD COLUMN "coherence" real;

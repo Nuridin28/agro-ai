@@ -11,6 +11,8 @@ import { polygonForFarmer } from "@/lib/mock/field-polygons";
 import { seasonFor } from "@/lib/mock/crop";
 import { verifySatellite, checkInactivity } from "@/lib/satellite";
 import { getSAREvents, isSARConfigured } from "@/lib/satellite/sar";
+import { getCoherenceSeries, isCoherenceConfigured } from "@/lib/satellite/coherence";
+import { detectCoherenceEvents } from "@/lib/satellite/coherence-events";
 import { SatelliteCard } from "@/components/SatelliteCard";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
@@ -59,7 +61,7 @@ async function renderForPolygon(
   const startDate = `${year}-04-01`;
   const endDate = `${year}-09-30`;
   try {
-    const [spatial, inactivity, sarEvents] = await Promise.all([
+    const [spatial, inactivity, sarEvents, coherenceSeries] = await Promise.all([
       verifySatellite({
         polygon, startDate, endDate,
         // expectedSowingDate триггерит late_growth-проверку. Только если у нас
@@ -75,8 +77,21 @@ async function renderForPolygon(
       isSARConfigured()
         ? getSAREvents(polygon, startDate, endDate).catch(() => null)
         : Promise.resolve(null),
+      isCoherenceConfigured()
+        ? getCoherenceSeries(polygon, startDate, endDate).catch(() => null)
+        : Promise.resolve(null),
     ]);
-    return <SatelliteCard spatial={spatial} inactivity={inactivity} sar={sarEvents} polygon={polygon} className={className} />;
+    const coherenceEvents = coherenceSeries ? detectCoherenceEvents(coherenceSeries) : null;
+    return (
+      <SatelliteCard
+        spatial={spatial}
+        inactivity={inactivity}
+        sar={sarEvents}
+        coherence={coherenceEvents}
+        polygon={polygon}
+        className={className}
+      />
+    );
   } catch (e) {
     return (
       <div className={`bg-rose-50 border border-rose-200 rounded-2xl p-5 text-sm text-rose-900 ${className}`}>

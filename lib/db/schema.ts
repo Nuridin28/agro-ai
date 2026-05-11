@@ -46,6 +46,7 @@ export const fieldSarObservations = pgTable(
     vvDb: real("vv_db"),                              // Sentinel-1 VV backscatter в дБ
     vhDb: real("vh_db"),                              // Sentinel-1 VH backscatter в дБ
     ndvi: real("ndvi"),                               // оставляем для будущей миграции NDVI в БД
+    coherence: real("coherence"),                     // interferometric γ ∈ [0..1] (source='s1_coherence')
     sampleCount: integer("sample_count"),             // сколько пикселей участвовало в усреднении
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
   },

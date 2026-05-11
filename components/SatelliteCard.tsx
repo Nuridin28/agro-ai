@@ -21,6 +21,7 @@ import type {
   NDVIFeatures,
 } from "@/lib/satellite/types";
 import type { SAREventsResult } from "@/lib/satellite/sar-events";
+import type { CoherenceEventsResult } from "@/lib/satellite/coherence-events";
 import { polygonAreaHa, polygonBboxDims } from "@/lib/satellite/geo";
 import { Card, CardHeader, SourcePill } from "@/components/ui";
 import { SatelliteImageThumb } from "@/components/SatelliteImageThumb";
@@ -58,13 +59,15 @@ interface Props {
   inactivity: InactivityCheckResult;
   // SAR-результат, если CDSE настроен и ряд получен. null/undefined = пропускаем.
   sar?: SAREventsResult | null;
+  // Coherence-результат (CCD). null/undefined если HyP3 не подключен и не mock.
+  coherence?: CoherenceEventsResult | null;
   // Полигон поля — нужен для интерактивного date-picker'а снимков.
   // Опционален: если не передан, секция «снимки по дате» не рендерится.
   polygon?: FieldPolygon;
   className?: string;
 }
 
-export function SatelliteCard({ spatial, inactivity, sar, polygon, className = "" }: Props) {
+export function SatelliteCard({ spatial, inactivity, sar, coherence, polygon, className = "" }: Props) {
   const f = spatial.features;
   const insufficient = spatial.status === "INSUFFICIENT_DATA";
   // Геодезическая площадь и габариты полигона. Считаем здесь, чтобы не
@@ -141,6 +144,8 @@ export function SatelliteCard({ spatial, inactivity, sar, polygon, className = "
       )}
 
       {sar && <SARBlock sar={sar} />}
+
+      {coherence && <CoherenceBlock coherence={coherence} />}
 
       <div className="border-t border-border-soft px-5 py-3 space-y-2">
         <div className="flex items-start justify-between flex-wrap gap-3">
@@ -333,6 +338,72 @@ function SARBlock({ sar }: { sar: SAREventsResult }) {
 
 function labelForKind(k: SAREventsResult["events"][number]["kind"]): string {
   return k === "harvest" ? "уборка" : k === "tillage" ? "вспашка" : k === "sowing" ? "посев" : "поле спит";
+}
+
+function CoherenceBlock({ coherence }: { coherence: CoherenceEventsResult }) {
+  const { summary, events } = coherence;
+  const accent = summary.fieldStable
+    ? "bg-rose-50 border-rose-200 text-rose-900"
+    : "bg-violet-50 border-violet-200 text-violet-900";
+  return (
+    <div className="border-t border-border-soft bg-muted/20 px-5 py-3 space-y-2">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-foreground/60">
+          Coherence (CCD) — interferometric change detection
+        </div>
+        <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md border ${accent}`}>
+          {summary.fieldStable
+            ? "Поверхность не менялась весь сезон"
+            : `Зафиксировано ${events.length} событий изменения`}
+        </span>
+      </div>
+      <div className="text-[12px] text-foreground/70 leading-relaxed">
+        <strong className="text-foreground/85">Что это:</strong> coherence γ — это степень схожести
+        двух радарных снимков одной точки, сделанных с интервалом 6–12 дней.
+        Если поверхность не менялась (поле стоит) — γ высокая (≥0.5). Если проехала
+        техника (вспашка, посев, уборка) — структура почвы нарушена, γ падает ниже 0.3.
+        Это самый прямой физический индикатор «было ли вообще что-то сделано на поле».
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <SmallStat
+          label="Средняя γ"
+          value={summary.meanGamma.toFixed(2)}
+          hint={summary.meanGamma >= 0.5 ? "поверхность стабильная" : "есть изменения за сезон"}
+          accent={summary.fieldStable ? "warn" : undefined}
+        />
+        <SmallStat
+          label="Минимум γ"
+          value={summary.minGamma.toFixed(2)}
+          hint={summary.minGamma < 0.3 ? "точно были работы" : "слабые изменения"}
+        />
+        <SmallStat
+          label="События изменения"
+          value={`${events.length}`}
+          hint={events.length === 0 ? "поле не работало" : `главное: ${summary.primaryEvent?.date ?? "—"}`}
+          accent={events.length === 0 ? "warn" : undefined}
+        />
+        <SmallStat
+          label="Пар наблюдений"
+          value={`${summary.pairsCount}`}
+          hint="окон 6/12 дн. в сезоне"
+        />
+      </div>
+      {events.length > 0 && (
+        <details className="text-[11px] text-foreground/70">
+          <summary className="cursor-pointer select-none">Все события coherence ({events.length})</summary>
+          <ul className="mt-1 space-y-0.5 ml-4 list-disc">
+            {events.map((e, i) => (
+              <li key={i}>
+                <span className="font-mono text-foreground/85">{e.date}</span> ·{" "}
+                γ={e.coherence.toFixed(2)} · conf {e.confidence.toFixed(2)} ·{" "}
+                <span className="text-foreground/60">{e.reason}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
 }
 
 function YoYBlock({ yoy, currentMax }: { yoy: YearOverYear; currentMax: number }) {

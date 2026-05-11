@@ -26,6 +26,7 @@
 |---|---|
 | [architecture.md](./architecture.md) | Компоненты, поток данных, список всех finding-кодов, ключевые модули и где что лежит. **Начни отсюда.** |
 | [operations.md](./operations.md) | Как поднять стек, настроить CDSE, прогнать refresh, запустить backtest и тесты. |
+| [coherence.md](./coherence.md) | Статус CCD (interferometric coherence) и план подключения ASF HyP3 для real-данных. |
 | [roadmap.md](./roadmap.md) | Что есть/нет, что добавить дальше, приоритеты. |
 
 ## Быстрый старт

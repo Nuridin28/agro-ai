@@ -15,6 +15,13 @@
       "when": 1778443180013,
       "tag": "0001_field_sar_observations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778492783632,
+      "tag": "0002_field_observations_coherence",
+      "breakpoints": true
     }
   ]
 }

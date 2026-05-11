@@ -34,6 +34,9 @@ export type CheckCode =
   | "CROP_SAR_MULTIPLE_HARVESTS"   // SAR: > 1 события уборки за сезон (многоукос — допустимо, но проверить категорию субсидии)
   | "CROP_SAR_SMALL_FIELD"         // SAR: поле меньше порога надёжности (< 50 пикселей), сигнал шумит
   | "CROP_AREA_MISMATCH"           // расхождение заявленной площади с геодезической из polygon4326 > 30 %
+  | "CROP_COHERENCE_FIELD_STABLE"  // CCD: γ стабильно высокая весь сезон — поле точно не работало
+  | "CROP_COHERENCE_EVENT"         // CCD: зафиксировано падение γ — изменение поверхности
+  | "CROP_TRIPLE_VALIDATED"        // NDVI + SAR + Coherence все согласны — максимальная уверенность
   // Скотоводство
   | "LIV_BULL_REPRO_GAP"           // быки куплены — приплода нет
   | "LIV_GENETIC_NO_GAIN"          // нет прироста привеса от племенных быков
