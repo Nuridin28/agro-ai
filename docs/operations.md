@@ -54,6 +54,84 @@ POSTGRES_PORT=5433 docker compose up -d postgres
 ⚠️ Бесплатный тир CDSE держит **~12 месяцев** архива S1. Поэтому мок-сезоны
 переведены на 2025 — без свежих данных SAR-канал на демо-фермерах не отработает.
 
+## Настроить ASF HyP3 для Coherence (CCD)
+
+Coherence — третий и **самый сильный** спутниковый канал. NASA-облако
+обсчитывает SLC-пары и отдаёт interferometric γ. См.
+[docs/coherence.md](./coherence.md) для подробной архитектуры.
+
+### Регистрация (один раз)
+
+1. https://urs.earthdata.nasa.gov → Register (бесплатно).
+2. Profile → Applications → Authorized Apps → Authorize:
+   - **Alaska Satellite Facility Hyp3 API**
+   - **Alaska Satellite Facility Processing Pipeline**
+3. Profile → **Generate Token** (или «User Tokens»). Скопировать строку
+   (≈ 600 символов). Действует ~60 дней — потом обновлять.
+
+### `.env.local`
+
+```
+EARTHDATA_TOKEN=eyJ0eXAi... (Bearer JWT)
+SAT_CRON_SECRET=любая_случайная_строка
+# Опциональный fallback для скачивания product-файлов:
+# EARTHDATA_USER=...
+# EARTHDATA_PASS=...
+```
+
+Перезапустить `npm run dev`.
+
+### Sanity-check (1 секунда)
+
+```bash
+node --env-file=.env.local -e "
+fetch('https://hyp3-api.asf.alaska.edu/user', {
+  headers: { authorization: 'Bearer ' + process.env.EARTHDATA_TOKEN }
+}).then(r => r.json()).then(j => console.log(j.application_status, 'credits:', j.remaining_credits))
+"
+# Ожидаем: APPROVED credits: 10000
+```
+
+### Первый refresh — submit джобов в NASA
+
+```bash
+SECRET=$(grep "^SAT_CRON_SECRET=" .env.local | cut -d= -f2)
+curl -sS -H "x-cron-secret: $SECRET" \
+  http://localhost:3000/api/satellite/coherence/refresh
+```
+
+⚠️ **Эндпоинт работает 3-5 минут** на первом прогоне (CDSE catalog scan
+по 10+ полигонам + 100 submit-ов в HyP3). Curl может отвалиться по
+таймауту — это нормально, submit-ы идут в БД.
+
+### Проверять прогресс
+
+```bash
+# Сколько джобов в каком статусе:
+PGPASSWORD=agro psql -h localhost -p 5433 -U agro -d agro -tAc \
+  "SELECT status, count(*) FROM field_coherence_jobs GROUP BY status"
+
+# Реальные γ-значения, записанные после finalize:
+PGPASSWORD=agro psql -h localhost -p 5433 -U agro -d agro -tAc \
+  "SELECT count(*) FROM field_sar_observations WHERE source='s1_coherence'"
+
+# Видеть свои джобы на NASA dashboard:
+# https://hyp3.asf.alaska.edu/jobs
+```
+
+### Производственный cron — раз в час
+
+```cron
+0 * * * * curl -fsS -H "x-cron-secret: ${SAT_CRON_SECRET}" https://app.example.kz/api/satellite/coherence/refresh > /var/log/coh-refresh.log 2>&1
+```
+
+Каждый вызов:
+- **PHASE 1** — submit новых пар (skipped те что уже в БД)
+- **PHASE 2** — polling всех PENDING/RUNNING → обновление статуса
+- **PHASE 3** — для SUCCEEDED: download `.zip` → ZIP-reader для `_corr.tif`
+  → `geotiff.js` + ray-casting clip mean γ по polygon4326 → запись
+  в `field_sar_observations` с `source='s1_coherence'` → `status='DONE'`
+
 ## Прогрев SAR-кеша
 
 При первом открытии страницы досье SAR-фетч идёт синхронно (5–15 сек).
@@ -117,6 +195,7 @@ small field, multi-harvest. Без jest/vitest — простой tsx-runner.
 
 ```bash
 npm run test:sar
+npm run test:coherence
 ```
 
 ```
@@ -250,9 +329,20 @@ docker compose up -d
 ## Полезные SQL-снэпшоты
 
 ```sql
--- Сколько наблюдений S1 в кеше, по годам
-SELECT EXTRACT(year FROM observation_date)::int AS year, count(*)
-FROM field_sar_observations GROUP BY 1 ORDER BY 1;
+-- Сколько наблюдений S1 в кеше, по годам и типу (backscatter / coherence)
+SELECT EXTRACT(year FROM observation_date)::int AS year, source, count(*)
+FROM field_sar_observations GROUP BY 1, 2 ORDER BY 1, 2;
+
+-- Состояние HyP3-джобов (PENDING/RUNNING/SUCCEEDED/FAILED/DONE)
+SELECT status, count(*), min(submitted_at), max(completed_at)
+FROM field_coherence_jobs GROUP BY 1 ORDER BY 1;
+
+-- Coherence-значения по полям (после того как джобы дойдут до DONE)
+SELECT field_key, observation_date, round(coherence::numeric, 2) as gamma,
+       sample_count
+FROM field_sar_observations
+WHERE source = 's1_coherence'
+ORDER BY field_key, observation_date LIMIT 20;
 
 -- Топ-5 полей с наибольшим количеством событий
 SELECT field_key, count(*), min(observation_date), max(observation_date)
@@ -277,9 +367,13 @@ ORDER BY submitted_at DESC LIMIT 20;
 ## Сброс данных
 
 ```bash
-# Удалить только SAR-кеш (для force-refresh)
+# Удалить только SAR + Coherence наблюдения (для force-refresh)
 PGPASSWORD=agro psql -h localhost -p 5433 -U agro -d agro -c \
   "TRUNCATE field_sar_observations"
+
+# Удалить HyP3 jobs-трекер (повторит submit всех пар при следующем refresh)
+PGPASSWORD=agro psql -h localhost -p 5433 -U agro -d agro -c \
+  "TRUNCATE field_coherence_jobs"
 
 # Удалить дисковый NDVI-кеш
 rm -rf /tmp/agro-sat-cache

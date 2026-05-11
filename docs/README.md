@@ -10,12 +10,17 @@
 Каждая заявка с декларацией урожая проходит через автоматический фрод-движок,
 который сверяет заявленные показатели с независимыми источниками:
 
-- **Гипрозем** — агрохимия почвы (P, N, K, гумус)
-- **Open-Meteo / Казгидромет** — погода и фенология
-- **Sentinel-2** (Sentinel Hub Cloud) — оптические снимки и NDVI
-- **Sentinel-1** (Copernicus Data Space Ecosystem) — радарные снимки и backscatter
+- **Гипрозем** — агрохимия почвы (P, N, K, гумус) + контуры полей (`polygon4326`)
+- **Open-Meteo / Казгидромет** — погода и фенология (исторические осадки для rain-фильтра)
+- **Sentinel-2** (Sentinel Hub Cloud) — оптические снимки и NDVI-ряды
+- **Sentinel-1 GRD** (CDSE) — радарные снимки и backscatter VV/VH
+- **Sentinel-1 SLC + ASF HyP3** — interferometric coherence (CCD) γ
 - **Plem.kz / VETIS / ИАС** — племенной учёт скота
 - **БНС / stat.gov.kz** — статистика урожайности
+
+Все четыре спутниковых канала работают на **реальных данных**, не моках.
+Сильнейший finding — `CROP_TRIPLE_VALIDATED` (NDVI + SAR + Coherence
+независимо показали «поле не работало»): risk 100 % от субсидии.
 
 Результат — список **finding-кодов** (нарушений) с потенциальным размером
 фрода в тенге для каждого, плюс агрегированный риск-скор фермера.
@@ -24,9 +29,9 @@
 
 | Файл | О чём |
 |---|---|
-| [architecture.md](./architecture.md) | Компоненты, поток данных, список всех finding-кодов, ключевые модули и где что лежит. **Начни отсюда.** |
-| [operations.md](./operations.md) | Как поднять стек, настроить CDSE, прогнать refresh, запустить backtest и тесты. |
-| [coherence.md](./coherence.md) | Статус CCD (interferometric coherence) и план подключения ASF HyP3 для real-данных. |
+| [architecture.md](./architecture.md) | Компоненты, поток данных, список всех finding-кодов (NDVI, SAR, Coherence, triple-validation), ключевые модули и где что лежит. **Начни отсюда.** |
+| [operations.md](./operations.md) | Поднять стек, настроить CDSE и Earthdata Token, прогнать refresh каналов, запустить backtest и тесты. |
+| [coherence.md](./coherence.md) | CCD-канал: NASA Earthdata setup, HyP3 INSAR_GAMMA flow, статус end-to-end и edge-cases. |
 | [roadmap.md](./roadmap.md) | Что есть/нет, что добавить дальше, приоритеты. |
 
 ## Быстрый старт
@@ -41,8 +46,9 @@ npm run db:migrate
 # 3. Запустить dev
 npm run dev
 
-# 4. Прогнать тесты SAR-детектора
+# 4. Прогнать тесты детекторов
 npm run test:sar
+npm run test:coherence
 ```
 
 Открыть [http://localhost:3000/inspector](http://localhost:3000/inspector).
@@ -53,5 +59,7 @@ npm run test:sar
 - Даты — ISO `YYYY-MM-DD` (UTC).
 - Все спутниковые операции graceful degrade: если SH/CDSE/Open-Meteo упали —
   страница рендерится без соответствующих карточек, а не ломается.
-- Если CDSE-кредов нет — SAR-канал просто отключается; всё остальное продолжает
-  работать на NDVI.
+- Если CDSE-кредов нет — SAR-канал просто отключается; всё остальное работает.
+- Если `EARTHDATA_TOKEN` не задан — Coherence-канал отключается; NDVI и SAR работают.
+- **Никаких mock-fallback'ов в продакшен-путях.** Канал либо работает на реальных
+  данных, либо не рендерится. `mock-sar.ts` и `mock-coherence.ts` удалены.

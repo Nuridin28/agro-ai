@@ -4,18 +4,30 @@
 
 ## Реалистичная оценка текущего состояния
 
-**Что работает (с оговорками):**
-- ✅ Каркас фрод-движка (NDVI + SAR + cross-validation + rain-фильтр)
-- ✅ Мок-режим для демо без сети
+**Что работает на реальных данных:**
+- ✅ Каркас фрод-движка (NDVI + SAR backscatter + Coherence + cross-validation + rain-фильтр)
+- ✅ NDVI через Sentinel Hub Cloud
+- ✅ SAR backscatter через CDSE (182+ точек в БД)
+- ✅ Coherence через ASF HyP3 (Earthdata Bearer auth → CDSE catalog → INSAR_GAMMA → geotiff clip)
+- ✅ Triple-validation (NDVI + SAR + Coherence) с finding `CROP_TRIPLE_VALIDATED`
 - ✅ Кеш в Postgres + дисковый, прогрев при регистрации
-- ✅ 11 unit-тестов на синтетических рядах
+- ✅ 19 unit-тестов на синтетических рядах (11 SAR + 8 Coherence)
 - ✅ Два UI-пути: F-* (мок) и U-* (реальный юзер)
+- ✅ Никаких mock-fallback'ов в продакшен-путях
+
+**Coherence — статус end-to-end (на дату snapshot документации):**
+- ✅ Auth, catalog, submit, polling — все подтверждены живыми данными
+- 🟡 Финал-фаза (download + clip + write в БД) — код есть, end-to-end не
+  прогонялась пока ни один HyP3-джоб не достиг SUCCEEDED. Ожидаемо
+  заработает на первом DONE; известные edge-cases (UTM-tile, DEFLATE-zip)
+  имеют точечные fix'ы.
 
 **Что не доказано:**
-- ❌ Что детектор реально ловит фрод на казахстанских полях.
-  Пороги (-3.5 дБ ΔVH, 30 дн. расхождение, и т.д.) пока **из литературы**
-  и работают на синтетике. Нужен backtest на реальных полях с известной
-  историей (см. [operations.md](./operations.md#backtest-на-реальных-полях)).
+- ❌ Что детекторы реально ловят фрод на казахстанских полях.
+  Пороги (-3.5 дБ ΔVH, γ < 0.3, 30 дн. расхождение, и т.д.) пока
+  **из литературы** и работают на синтетике. Нужен backtest на реальных
+  полях с известной историей событий (см.
+  [operations.md](./operations.md#backtest-на-реальных-полях)).
 
 **До тех пор пока backtest не сделан — называть систему «работает» преждевременно.**
 Это самое важное, что нужно сделать дальше.
@@ -164,27 +176,20 @@
 
 ## Приоритет 4 — расширения сигналов
 
-### 4.1. Coherence (CCD) через BYOC или собственный пайплайн
+### 4.1. ~~Coherence (CCD)~~ — ✅ **DONE через ASF HyP3**
 
-**Зачем:** обычный backscatter ловит уборку на ~70-80 % точности.
-**Coherence** (interferometric phase change) — поднимает до 85-93 %, потому
-что ловит изменение **структуры** поверхности, а не просто яркости.
+Изначально планировалось как BYOC или своя SNAP-инфра. По факту реализовано
+через **ASF HyP3** (бесплатное NASA-облако): submit SLC-пар через CDSE
+catalog, async-обработка, download `_corr.tif`, ray-casting clip mean γ.
 
-**Что делать:** два пути.
+**Что осталось дотюнить (точечные fix'ы, не архитектура):**
+- proj4js-reproject если HyP3 отдаст tile в UTM (~30 строк)
+- pako-inflate если HyP3 решит сжать coherence.tif внутри zip (~10 строк)
+- ASF Search для перехода на `INSAR_ISCE_BURST` (быстрее, ~50 строк)
+- Раздробить refresh-эндпоинт на PHASE1/PHASE2/PHASE3 чтобы влезть
+  в 5-мин лимит Vercel Cron при > 50 полигонах
 
-**A. BYOC (Bring Your Own Collection) на Sentinel Hub:**
-- Купить готовый coherence-датасет (Earth Big Data, Sinergise) и подключить
-  как ещё один collection в SH-запросе.
-- Цена: $50-200/мес.
-- Сложность: 2-3 часа интеграции.
-
-**B. Свой процессинг на pyroSAR + CDSE:**
-- Поднять отдельный воркер на Python, тянуть SLC-пары с CDSE, считать
-  coherence через SNAP/pyroSAR, складывать в БД.
-- Бесплатно, но 2-3 недели на отладку.
-- Нужно ML-Ops (очередь джобов, мониторинг).
-
-**Сложность:** A — день, B — спринт.
+См. [coherence.md](./coherence.md#известные-edge-cases).
 
 ### 4.2. NDWI / NDMI — irrigation detection
 

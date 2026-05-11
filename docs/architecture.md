@@ -85,7 +85,37 @@
 **Кеш:** дисковый, в `/tmp/agro-sat-cache/` ([lib/satellite/cache.ts](../lib/satellite/cache.ts)).
 TTL 30 дней — снимки прошлого не меняются.
 
-## SAR-канал (Sentinel-1)
+## Coherence-канал (Sentinel-1 CCD)
+
+**Самый сильный физический канал.** Interferometric coherence γ ∈ [0..1]
+показывает, изменилась ли структура поверхности поля между двумя SLC-
+снимками. γ < 0.3 = механическое вмешательство (вспашка, посев, уборка).
+
+**Провайдер:** ASF HyP3 (NASA), endpoint `hyp3-api.asf.alaska.edu`.
+**Auth:** Bearer token, генерируется на urs.earthdata.nasa.gov.
+**Креды:** `EARTHDATA_TOKEN` в `.env.local`. Без токена канал отключается.
+
+**Архитектура:** асинхронная. Cron `/api/satellite/coherence/refresh`:
+1. Находит SLC-пары через CDSE OData ([lib/satellite/cdse-catalog.ts](../lib/satellite/cdse-catalog.ts)).
+2. Submit-ит каждую пару в HyP3 как `INSAR_GAMMA` job.
+3. При следующих вызовах cron — polling: PENDING → RUNNING → SUCCEEDED.
+4. Для SUCCEEDED — скачивает `_corr.tif`, считает mean γ по polygon4326
+   через `geotiff.js` + ray-casting, пишет в БД.
+
+**Время:** 15-45 мин на пару (NASA-обработка). На UI данные появляются
+с задержкой относительно snapshot-даты.
+
+**Что считаем:** [lib/satellite/coherence-events.ts](../lib/satellite/coherence-events.ts)
+- γ ≥ 0.5 stable_pairs / pairs_total ≥ 85 % → поле не работало весь сезон
+- drop γ < 0.3 (с относительным падением ≥ 0.15 от предыдущей пары) → событие
+- mean γ + min γ за сезон — для UI и сравнения с пороговыми
+
+**Кеш:** Postgres `field_sar_observations` с `source='s1_coherence'`.
+Trackеr async-джобов: `field_coherence_jobs` (id = HyP3 UUID).
+
+**Подробнее:** [coherence.md](./coherence.md).
+
+## SAR-канал (Sentinel-1 backscatter)
 
 **Провайдер:** Copernicus Data Space Ecosystem (бесплатно), endpoint `sh.dataspace.copernicus.eu`.
 **Креды:** `CDSE_CLIENT_ID` / `CDSE_CLIENT_SECRET` в `.env.local`. Если кредов нет —
@@ -170,6 +200,14 @@ TTL 30 дней — снимки прошлого не меняются.
 | `CROP_SAR_SMALL_FIELD` | info | < 50 пикселей — SAR ненадёжен | 0 |
 | `CROP_HARVEST_CROSS_VALIDATED` | **critical** | NDVI + SAR оба показывают расхождение даты уборки в одну сторону | **80 %** |
 
+### Земледелие — Coherence / CCD (Sentinel-1 InSAR)
+
+| Код | Severity | Триггер | Риск ₸ |
+|---|---|---|---|
+| `CROP_COHERENCE_FIELD_STABLE` | **critical** | γ ≥ 0.5 в > 85 % пар сезона — поверхность не менялась | **90 %** |
+| `CROP_COHERENCE_EVENT` | info | drop γ < 0.3 — зафиксировано изменение поверхности | 0 |
+| `CROP_TRIPLE_VALIDATED` | **critical** | NDVI + SAR + Coherence все три показывают inactive — максимальная уверенность | **100 %** |
+
 ### Скотоводство
 
 | Код | Severity | Триггер |
@@ -187,10 +225,13 @@ TTL 30 дней — снимки прошлого не меняются.
 
 | Тема | Файлы |
 |---|---|
-| Спутниковые провайдеры | [lib/satellite/sentinel-hub-provider.ts](../lib/satellite/sentinel-hub-provider.ts), [lib/satellite/cdse-provider.ts](../lib/satellite/cdse-provider.ts), [lib/satellite/mock-provider.ts](../lib/satellite/mock-provider.ts), [lib/satellite/mock-sar.ts](../lib/satellite/mock-sar.ts) |
+| Спутниковые провайдеры | [lib/satellite/sentinel-hub-provider.ts](../lib/satellite/sentinel-hub-provider.ts) (S2 NDVI), [lib/satellite/cdse-provider.ts](../lib/satellite/cdse-provider.ts) (S1 GRD), [lib/satellite/cdse-catalog.ts](../lib/satellite/cdse-catalog.ts) (SLC catalog), [lib/satellite/hyp3-client.ts](../lib/satellite/hyp3-client.ts) (HyP3 jobs), [lib/satellite/geotiff-clip.ts](../lib/satellite/geotiff-clip.ts) (GeoTIFF clip) |
 | NDVI features | [lib/satellite/ndvi.ts](../lib/satellite/ndvi.ts) |
 | SAR-сетап и кеш | [lib/satellite/sar.ts](../lib/satellite/sar.ts) |
 | SAR-детектор | [lib/satellite/sar-events.ts](../lib/satellite/sar-events.ts) |
+| Coherence-оркестратор | [lib/satellite/coherence.ts](../lib/satellite/coherence.ts) |
+| Coherence-детектор | [lib/satellite/coherence-events.ts](../lib/satellite/coherence-events.ts) |
+| Coherence cron | [app/api/satellite/coherence/refresh/route.ts](../app/api/satellite/coherence/refresh/route.ts) |
 | Inactivity-check | [lib/satellite/inactivity.ts](../lib/satellite/inactivity.ts) |
 | Verify-движок | [lib/verify/index.ts](../lib/verify/index.ts), [lib/verify/satellite.ts](../lib/verify/satellite.ts), [lib/verify/crop.ts](../lib/verify/crop.ts), [lib/verify/livestock.ts](../lib/verify/livestock.ts) |
 | Проверка пользовательских заявок | [lib/applications-check.ts](../lib/applications-check.ts) |
@@ -207,6 +248,8 @@ TTL 30 дней — снимки прошлого не меняются.
 - **Postgres лежит** → страница падает (это блокер). Fix: поднять docker.
 - **Sentinel Hub лежит** → NDVI блок не рисуется, остальные каналы работают.
 - **CDSE не настроен или лежит** → SAR-блок не рисуется, NDVI работает.
+- **Earthdata Token не задан или истёк** → Coherence-блок не рисуется, остальные каналы работают; cron `/api/satellite/coherence/refresh` отвечает 503.
+- **HyP3 ещё не закончил обработку** → Coherence-блок не рисуется, пока в БД нет ни одной γ-точки (PHASE 3 запишет данные при следующем cron-вызове).
 - **Open-Meteo лежит** → Rain filter отключён (детектор работает без фильтра),
   а блок «реальное метео» показывает мок.
 - **Полигон у юзера не сохранён при регистрации** → используется квадрат 3×3 км
