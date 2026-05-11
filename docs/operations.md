@@ -326,6 +326,23 @@ docker compose up -d
 [docker-entrypoint.sh](../docker-entrypoint.sh). Если миграция упадёт — контейнер
 не стартует.
 
+## Lazy-загрузка спутника в досье инспектора
+
+Базовая страница `/inspector/farmers/U-...` рендерится **без** SH/CDSE/HyP3-
+запросов. Видны только:
+- Заголовок фермера (имя, регион, общая площадь геодезически)
+- Список всех parcel'ов с площадью, габаритами, центроидом, агрохимией
+- Бейдж статуса HyP3-джобов на каждом parcel'е (PENDING/RUNNING/DONE)
+- Заявки на субсидии с авто-проверкой (агрохимия + метео, без спутника)
+
+Клик «▶ Посмотреть со спутника» → URL меняется на `?sat=fi:pi` (индексы
+UserField + Parcel) → перерендер с инлайн `<SatelliteSection>` для этого
+parcel'а: NDVI graph + 3 thumbnail + SAR + (если HyP3 доделал) Coherence.
+
+Это убирает 30+ автоматических SH/CDSE-вызовов на каждое открытие досье
+у фермера с >5 хозяйств. Инспектор сам выбирает «подозрительный участок»
+и за него платится квота.
+
 ## Полезные SQL-снэпшоты
 
 ```sql
@@ -353,6 +370,31 @@ GROUP BY 1 ORDER BY 2 DESC LIMIT 5;
 SELECT id, email, farm_name, jsonb_array_length(fields) as fields_count
 FROM users
 WHERE jsonb_array_length(fields) > 0;
+
+-- Сколько parcel'ов в каждом UserField (после нового рефактора)
+SELECT
+  u.id, u.farm_name,
+  f.value->>'nazvxoz' as nazvxoz,
+  jsonb_typeof(f.value->'parcels') as parcels_type,
+  CASE
+    WHEN jsonb_typeof(f.value->'parcels') = 'array'
+      THEN jsonb_array_length(f.value->'parcels')
+    ELSE (f.value->'parcels')::int     -- legacy: parcels был числом
+  END as parcels_count,
+  jsonb_array_length(f.value->'polygon4326') as legacy_poly_points
+FROM users u
+CROSS JOIN LATERAL jsonb_array_elements(u.fields) f
+WHERE jsonb_array_length(u.fields) > 0
+ORDER BY u.created_at DESC;
+
+-- Юзеры со старой схемой (parcels: number) — требуют перерегистрации
+-- чтобы получить полный массив parcel'ов
+SELECT u.id, u.email, u.farm_name
+FROM users u
+WHERE EXISTS (
+  SELECT 1 FROM jsonb_array_elements(u.fields) f
+  WHERE jsonb_typeof(f->'parcels') = 'number'
+);
 
 -- Заявки с декларацией урожая (для фрод-чека)
 SELECT id, farmer_id, type, status, date,

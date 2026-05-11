@@ -45,12 +45,47 @@
                           └──────────────────────┘
 ```
 
+## Модель данных полей
+
+**Один `UserField` = одно хозяйство в одном районе** (например, «ТОО Шерубай-Су»
+в `ah_08_118`). Внутри него **массив `parcels`** — реальные участки кадастра,
+у каждого свой контур и (если Гипрозем отдал per-feature атрибуты) своя
+агрохимия.
+
+```typescript
+interface Parcel {
+  polygon4326: number[][];     // outer ring [lng, lat][], 30-300 точек кадастра
+  sample?: GiprozemAttrs;      // per-parcel агрохимия (P, N, K, гумус...)
+  cadastralNumber?: string;    // если attribute kadnomer/cadnumber присутствует
+}
+
+interface UserField {
+  nazvxoz: string;
+  layerId: number;
+  layerName: string;
+  oblastCode: string;
+  parcels: Parcel[];           // все участки хозяйства в районе (1-50+)
+  sample: GiprozemAttrs;       // агрегат-агрохимия для хозяйства
+  polygon4326?: number[][];    // legacy: первый ring, для backward-compat
+}
+```
+
+**Backward-compat:** старые записи в БД имеют форму `parcels: number` (счётчик)
++ `polygon4326` (один контур). `normalizeUserField()` в [lib/users-store.ts](../lib/users-store.ts)
+конвертит их в новый формат на чтении — создаёт массив с 1 parcel'ом из legacy-полигона.
+
+**Что хранит Гипрозем-ArcGIS:** `geometry.rings[][][]` где outer ring — массив
+точек `[lng, lat]`. Реальные кадастровые контуры имеют **30–300 точек**
+(не 4, как у идеального прямоугольника). `pickOuterRing()` в
+[lookup-farm](../app/api/auth/lookup-farm/route.ts) прореживает до max 64
+точек для Sentinel Hub Statistical API.
+
 ## Поток обработки заявки
 
 1. **Фермер регистрируется** через `/register` → выбирает хозяйство в Гипрозем-каталоге →
-   подтверждает участки → к юзеру привязываются `polygon4326` (контуры полей).
-   После регистрации [api/auth/register/route.ts](../app/api/auth/register/route.ts)
-   запускает fire-and-forget warmup S1-кеша для каждого полигона.
+   подтверждает участки → к юзеру привязываются **все** `parcels[]` хозяйства
+   с их `polygon4326`. После регистрации [api/auth/register/route.ts](../app/api/auth/register/route.ts)
+   запускает fire-and-forget warmup S1-кеша **для каждого parcel'а**.
 
 2. **Фермер подаёт заявку** через `/farmer/applications` ([components/ApplicationForm.tsx](../components/ApplicationForm.tsx))
    с декларацией: культура, площадь, урожайность, дата посева, дата уборки.
@@ -60,9 +95,18 @@
 3. **Инспектор открывает досье** на `/inspector/farmers/[id]`:
    - Для **F-* (мок)** идёт через `verifyFarmerWithSatellite()` ([lib/verify/index.ts:111](../lib/verify/index.ts))
      — sync-данные (агрохимия, метео из мока) + параллельный fetch NDVI / SAR / inactivity.
-   - Для **U-* (реальный юзер)** — `checkUserApplication()` вызывается на каждой
-     заявке отдельно; параллельно тянет NDVI и SAR-сводки и пробрасывает в проверку.
-   - Карточка спутника `<SatelliteSection>` стримится через `<Suspense>`.
+   - Для **U-* (реальный юзер)** базовая страница рендерится **без единого
+     спутникового запроса** (lazy-режим):
+     - Заголовок фермера + список всех `parcels` с площадью, габаритами,
+       центроидом, агрохимией — мгновенно из БД.
+     - Каждый parcel показывает бейджи статуса HyP3-джобов: «⏳ N в обработке»
+       или «✓ N готов» (читается из `field_coherence_jobs`).
+     - Кнопка **«▶ Посмотреть со спутника»** на каждой parcel-карточке.
+     - Только при клике URL меняется на `?sat=fi:pi` → перерендер с
+       `<SatelliteSection>` для этого конкретного parcel'а.
+     - `checkUserApplication()` вызывается на каждой заявке; NDVI/SAR-сводки
+       прокидываются только если инспектор уже открыл хотя бы один parcel
+       через `?sat=...`.
 
 4. **Findings** агрегируются в `runSatelliteChecks()` ([lib/verify/satellite.ts](../lib/verify/satellite.ts)),
    рисуются как `<FindingCard>` под заголовком, и формируют общий риск-скор.
@@ -84,6 +128,26 @@
 
 **Кеш:** дисковый, в `/tmp/agro-sat-cache/` ([lib/satellite/cache.ts](../lib/satellite/cache.ts)).
 TTL 30 дней — снимки прошлого не меняются.
+
+## Геометрия полигона
+
+**Площадь** ([lib/satellite/geo.ts](../lib/satellite/geo.ts)):
+- `polygonAreaM2()` / `polygonAreaHa()` — формула Бэвиса-Камбарелли на
+  сфере WGS84 (R = 6371008.8 м). Точность ~0.1 % для полей до 100 га.
+- `polygonBboxDims()` — габариты bounding box через haversine: ширина =
+  расстояние по lng на средней широте, высота = по lat.
+- `polygonPerimeterM()` — суммарная длина по haversine между соседями.
+
+**Центроид** (для отображения координат на UI): простое среднее `[lng, lat]`
+по точкам полигона. Не строгий центр масс (его считать дороже), но для
+показа «53.224°N, 63.487°E» точности с лихвой.
+
+**Что видит инспектор** для каждого parcel'а на досье:
+```
+Участок №1                              [▶ Посмотреть со спутника]
+19.2 га · 487×395 м · центр 53.2241°N, 63.4870°E
+per-parcel агрохимия: гумус 4.1 · P 38 · N 22 · K 410
+```
 
 ## Coherence-канал (Sentinel-1 CCD)
 
@@ -236,7 +300,9 @@ Trackеr async-джобов: `field_coherence_jobs` (id = HyP3 UUID).
 | Verify-движок | [lib/verify/index.ts](../lib/verify/index.ts), [lib/verify/satellite.ts](../lib/verify/satellite.ts), [lib/verify/crop.ts](../lib/verify/crop.ts), [lib/verify/livestock.ts](../lib/verify/livestock.ts) |
 | Проверка пользовательских заявок | [lib/applications-check.ts](../lib/applications-check.ts) |
 | API-роуты | [app/api/satellite/sar/refresh/route.ts](../app/api/satellite/sar/refresh/route.ts), [app/api/satellite/cron/route.ts](../app/api/satellite/cron/route.ts), [app/api/satellite/verify/route.ts](../app/api/satellite/verify/route.ts), [app/api/satellite/image/route.ts](../app/api/satellite/image/route.ts) |
-| UI карточки спутника | [components/SatelliteSection.tsx](../components/SatelliteSection.tsx), [components/SatelliteCard.tsx](../components/SatelliteCard.tsx), [components/RealMeteoCard.tsx](../components/RealMeteoCard.tsx) |
+| UI карточки спутника | [components/SatelliteSection.tsx](../components/SatelliteSection.tsx), [components/SatelliteCard.tsx](../components/SatelliteCard.tsx), [components/RealMeteoCard.tsx](../components/RealMeteoCard.tsx), [components/SatelliteDatePicker.tsx](../components/SatelliteDatePicker.tsx) |
+| Геодезия (площадь, габариты, центроид) | [lib/satellite/geo.ts](../lib/satellite/geo.ts) |
+| GeoTIFF clip (для coherence) | [lib/satellite/geotiff-clip.ts](../lib/satellite/geotiff-clip.ts) |
 | Метео | [lib/real-meteo.ts](../lib/real-meteo.ts), [lib/mock/meteo.ts](../lib/mock/meteo.ts) |
 | Тесты детектора | [scripts/sar-events.test.ts](../scripts/sar-events.test.ts) |
 | Backtest на полевых данных | [scripts/sar-backtest.ts](../scripts/sar-backtest.ts) |
@@ -252,5 +318,11 @@ Trackеr async-джобов: `field_coherence_jobs` (id = HyP3 UUID).
 - **HyP3 ещё не закончил обработку** → Coherence-блок не рисуется, пока в БД нет ни одной γ-точки (PHASE 3 запишет данные при следующем cron-вызове).
 - **Open-Meteo лежит** → Rain filter отключён (детектор работает без фильтра),
   а блок «реальное метео» показывает мок.
-- **Полигон у юзера не сохранён при регистрации** → используется квадрат 3×3 км
-  вокруг центра района Гипрозема (с предупреждением «приблизительный контур»).
+- **Юзер зарегистрировался по старой схеме (parcels = number, один polygon)** →
+  normalizer создаёт `parcels: [{ polygon4326 }]` из legacy-поля. Спутник
+  работает по этому одному контуру; новые parcels-сигналы (per-participant
+  агрохимия, multiple participants) недоступны — рекомендуется перерегистрация.
+- **Юзер вообще без polygon4326** (regression в старых данных) → блок
+  «Контуры участков не сохранились» в UI, спутник не доступен. Fix:
+  перерегистрировать хозяйство — текущий регистрационный поток сохраняет
+  все rings.

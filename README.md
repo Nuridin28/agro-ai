@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Agro Subsidy Fraud Check
 
-## Getting Started
+Инспекторская панель для проверки заявок на сельхоз-субсидии в Казахстане.
+Каждая заявка с декларацией урожая прогоняется через автоматический
+фрод-движок, который сверяет показатели фермера с независимыми спутниковыми
+и государственными источниками.
 
-First, run the development server:
+## Что внутри
+
+| Источник | Что даёт |
+|---|---|
+| **Гипрозем** | агрохимия почвы (P, N, K, гумус) + кадастровые контуры полей |
+| **Open-Meteo / Казгидромет** | погода, фенология, исторические осадки (rain-фильтр) |
+| **Sentinel-2** (Sentinel Hub Cloud) | оптические снимки и NDVI-ряды |
+| **Sentinel-1 GRD** (Copernicus DataSpace) | радарный backscatter VV/VH |
+| **Sentinel-1 SLC + ASF HyP3** | interferometric coherence γ (CCD) |
+| **Plem.kz / VETIS / ИАС** | племенной учёт скота, вакцинации |
+| **БНС / stat.gov.kz** | статистика урожайности |
+
+Все четыре спутниковых канала работают **на реальных данных, без моков**.
+
+## Самые сильные фрод-сигналы
+
+| Finding-код | Severity | Условие | Риск ₸ |
+|---|---|---|---|
+| `CROP_TRIPLE_VALIDATED` | **critical** | NDVI + SAR + Coherence все три независимо показали «поле не работало» | **100%** |
+| `CROP_COHERENCE_FIELD_STABLE` | critical | γ ≥ 0.5 в > 85% пар сезона — поверхность не менялась | 90% |
+| `CROP_HARVEST_CROSS_VALIDATED` | critical | NDVI + SAR оба показывают расхождение даты уборки в одну сторону | 80% |
+| `CROP_SAR_FIELD_INACTIVE` | high | σ VH за сезон < 1.0 дБ | 70% |
+| `CROP_AREA_MISMATCH` | high | заявленная площадь > 1.3× геодезической из polygon4326 | до 100% |
+
+Полный список — в [docs/architecture.md](./docs/architecture.md).
+
+## Стек
+
+- **Next.js 16** (App Router, Turbopack)
+- **React 19**
+- **TypeScript** strict
+- **Drizzle ORM** + **PostgreSQL 16**
+- **Redis** (rate-limit + кеш Гипрозема)
+- **Tailwind v4**
+- **geotiff.js** для парсинга HyP3-продуктов
+- **Sentinel Hub** + **CDSE OData** + **ASF HyP3** API
+
+## Быстрый старт
 
 ```bash
+# 1. Postgres + Redis в docker
+docker compose up -d postgres redis
+
+# 2. Миграции
+npm run db:migrate
+
+# 3. Dev-сервер
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откроется на [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Для полной работы спутникового канала нужны:
+- `SH_CLIENT_ID` / `SH_CLIENT_SECRET` (Sentinel Hub)
+- `CDSE_CLIENT_ID` / `CDSE_CLIENT_SECRET` (Copernicus DataSpace)
+- `EARTHDATA_TOKEN` (NASA Earthdata, для HyP3 coherence)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Подробнее — в [docs/operations.md](./docs/operations.md) и
+[docs/coherence.md](./docs/coherence.md).
 
-## Learn More
+## Тесты
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run test:sar          # 11 фикстур детектора SAR-событий
+npm run test:coherence    # 8 фикстур coherence-детектора
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Real-data backtest на казахстанских полях — см.
+[scripts/sar-backtest.fixtures.example.json](./scripts/sar-backtest.fixtures.example.json) и
+[docs/operations.md#backtest-на-реальных-полях](./docs/operations.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Документация
 
-## Deploy on Vercel
+| Файл | О чём |
+|---|---|
+| [docs/README.md](./docs/README.md) | Карта документации, быстрый старт |
+| [docs/architecture.md](./docs/architecture.md) | Компоненты, поток данных, все finding-коды, модель `UserField.parcels` |
+| [docs/operations.md](./docs/operations.md) | CDSE / Earthdata setup, refresh-конвейер, backtest, SQL-снэпшоты |
+| [docs/coherence.md](./docs/coherence.md) | CCD-канал, HyP3 INSAR_GAMMA flow, edge-cases |
+| [docs/roadmap.md](./docs/roadmap.md) | Что есть, что добавить дальше, приоритеты |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Лицензия
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Внутренний проект. Не публиковать без согласования.

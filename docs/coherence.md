@@ -165,11 +165,16 @@ curl -sS -H "x-cron-secret: $SECRET" \
   http://localhost:3000/api/satellite/coherence/refresh
 ```
 
+Refresh-эндпоинт обходит **каждый parcel** каждого юзера (после рефактора
+`UserField.parcels: Parcel[]`). То есть если у фермера 5 хозяйств × 3 участка =
+15 parcel'ов, по каждому ищутся свои SLC-пары и отправляются свои HyP3-джобы.
+
 Каждый вызов:
-- PHASE 1 — добивает новые submit-ы (skipped уже существующих)
+- PHASE 1 — submit новых пар для всех parcel'ов (skipped уже существующих)
 - PHASE 2 — опрашивает PENDING/RUNNING джобы, обновляет status
 - PHASE 3 — для каждого только что SUCCEEDED: скачивает coherence.tif,
-  считает mean γ по полигону, пишет в `field_sar_observations`,
+  считает mean γ по конкретному parcel-полигону, пишет в
+  `field_sar_observations` с `field_key = polygonKey(parcel.polygon4326)`,
   помечает job как `DONE`
 
 Через **2-4 часа** все 100+ пар должны быть DONE и в БД появятся
