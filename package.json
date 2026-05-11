@@ -11,7 +11,8 @@
     "db:studio": "node --env-file=.env.local node_modules/.bin/drizzle-kit studio",
     "sar:backtest": "node --env-file=.env.local node_modules/.bin/tsx scripts/sar-backtest.ts",
     "test:sar": "node node_modules/.bin/tsx scripts/sar-events.test.ts",
-    "test:coherence": "node node_modules/.bin/tsx scripts/coherence-events.test.ts"
+    "test:coherence": "node node_modules/.bin/tsx scripts/coherence-events.test.ts",
+    "test:yield": "node node_modules/.bin/tsx scripts/yield-predict.test.ts"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.21",
