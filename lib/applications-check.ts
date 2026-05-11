@@ -9,6 +9,8 @@ import type { StoredApplication, CropDeclaration } from "./applications-store";
 import { CROP_NORMS, SOIL_REQUIREMENTS } from "./norms";
 import type { UserField } from "./users-store";
 import { CROP_LABEL } from "./types";
+import { polygonAreaHa } from "./satellite/geo";
+import type { FieldPolygon } from "./satellite/types";
 
 export type CheckSeverity = "ok" | "info" | "warn" | "high" | "critical";
 
@@ -95,6 +97,33 @@ export function checkUserApplication(
         title: "Низкий гумус для заявленного сбора",
         detail: `Гумус ${sample.gum}% при норме ≥ ${SOIL_REQUIREMENTS.humusPctMin}%. Заявленные ${decl.declaredYieldCha} ц/га выше реалистичного потенциала такой почвы.`,
       });
+    }
+  }
+
+  // 2b) Расхождение заявленной площади с геодезической из polygon4326.
+  // Если фермер прикрепил настоящий контур поля, можем посчитать реальную
+  // площадь и сравнить с decl.areaHa. Расхождение > 30 % — фрод-флаг
+  // (либо заявка раздута, либо привязан не тот контур).
+  const poly = userField?.polygon4326;
+  if (poly && Array.isArray(poly) && poly.length >= 4) {
+    const realAreaHa = polygonAreaHa(poly as FieldPolygon);
+    if (realAreaHa > 0.1) {
+      const ratio = decl.areaHa / realAreaHa;
+      if (ratio > 1.3) {
+        out.push({
+          code: "CROP_AREA_MISMATCH",
+          severity: "high",
+          title: "Заявленная площадь больше геодезической",
+          detail: `В заявке указано ${decl.areaHa} га, а фактический контур из Гипрозема даёт ${realAreaHa.toFixed(1)} га (заявка на ${Math.round((ratio - 1) * 100)} % больше). Возможны: завышение площади для субсидии, или прикреплён не тот контур поля.`,
+        });
+      } else if (ratio < 0.7) {
+        out.push({
+          code: "CROP_AREA_MISMATCH",
+          severity: "warn",
+          title: "Заявленная площадь меньше геодезической",
+          detail: `В заявке ${decl.areaHa} га, контур Гипрозема — ${realAreaHa.toFixed(1)} га (заявка на ${Math.round((1 - ratio) * 100)} % меньше). Скорее всего фермер декларирует только засеянную часть поля — стоит проверить, какова реальная площадь работ.`,
+        });
+      }
     }
   }
 

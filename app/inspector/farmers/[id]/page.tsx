@@ -25,6 +25,7 @@ import { fetchSeason } from "@/lib/real-meteo";
 import { getSatelliteProvider } from "@/lib/satellite";
 import { computeFeatures } from "@/lib/satellite/ndvi";
 import { getSAREvents, isSARConfigured } from "@/lib/satellite/sar";
+import { polygonAreaHa, polygonBboxDims } from "@/lib/satellite/geo";
 import type { FieldPolygon } from "@/lib/satellite/types";
 
 export function generateStaticParams() {
@@ -429,8 +430,18 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
             </div>
             <div className="text-xs text-foreground/55 mt-1.5 font-mono">{farmerId}</div>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full md:w-auto md:min-w-64">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full md:w-auto md:min-w-80">
             <Mini label="Привязок Гипрозема" value={user.fields.length} />
+            <Mini
+              label="Общая площадь"
+              value={(() => {
+                const totalHa = user.fields.reduce((s, f) => {
+                  if (!f.polygon4326 || f.polygon4326.length < 4) return s;
+                  return s + polygonAreaHa(f.polygon4326 as FieldPolygon);
+                }, 0);
+                return totalHa > 0 ? `${totalHa.toFixed(1)} га` : "—";
+              })()}
+            />
             <Mini label="Подано на сумму" value={formatTenge(totalRequested)} />
           </div>
         </div>
@@ -542,7 +553,7 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
 
       {user.fields.length > 0 ? (
         <Card>
-          <CardHeader title={`Привязки Гипрозема · ${user.fields.length}`} subtitle="Хозяйства и участки, прикреплённые при регистрации." />
+          <CardHeader title={`Привязки Гипрозема · ${user.fields.length}`} subtitle="Хозяйства и участки, прикреплённые при регистрации. Площадь рассчитана геодезически из контура polygon4326." />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-[11px] uppercase tracking-wider text-foreground/60 bg-muted/60 text-left">
@@ -550,6 +561,8 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
                   <th className="px-5 py-2 font-medium">Название хозяйства</th>
                   <th className="px-3 py-2 font-medium">Слой Гипрозема</th>
                   <th className="px-3 py-2 font-medium text-right">Участков</th>
+                  <th className="px-3 py-2 font-medium text-right">Площадь</th>
+                  <th className="px-3 py-2 font-medium text-right">Габариты</th>
                   <th className="px-3 py-2 font-medium text-right">Гумус %</th>
                   <th className="px-3 py-2 font-medium text-right">P мг/кг</th>
                   <th className="px-3 py-2 font-medium text-right">N мг/кг</th>
@@ -557,17 +570,24 @@ async function RealUserPage({ user, farmerId }: { user: User; farmerId: string }
                 </tr>
               </thead>
               <tbody>
-                {user.fields.map((f, i) => (
-                  <tr key={i} className="border-t border-border align-top">
-                    <td className="px-5 py-3 font-medium">{f.nazvxoz}</td>
-                    <td className="px-3 py-3 font-mono text-xs">{f.layerName}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{f.parcels}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.gum ?? "—"}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.p ?? "—"}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.n ?? "—"}</td>
-                    <td className="px-3 py-3 text-right tabular-nums">{f.sample.k ?? "—"}</td>
-                  </tr>
-                ))}
+                {user.fields.map((f, i) => {
+                  const poly = f.polygon4326 && f.polygon4326.length >= 4 ? (f.polygon4326 as FieldPolygon) : null;
+                  const areaHa = poly ? polygonAreaHa(poly) : null;
+                  const bbox = poly ? polygonBboxDims(poly) : null;
+                  return (
+                    <tr key={i} className="border-t border-border align-top">
+                      <td className="px-5 py-3 font-medium">{f.nazvxoz}</td>
+                      <td className="px-3 py-3 font-mono text-xs">{f.layerName}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{f.parcels}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{areaHa !== null ? `${areaHa.toFixed(1)} га` : "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-foreground/70">{bbox ? `${Math.round(bbox.widthM)}×${Math.round(bbox.heightM)} м` : "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.gum ?? "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.p ?? "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.n ?? "—"}</td>
+                      <td className="px-3 py-3 text-right tabular-nums">{f.sample.k ?? "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

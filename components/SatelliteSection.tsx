@@ -76,7 +76,7 @@ async function renderForPolygon(
         ? getSAREvents(polygon, startDate, endDate).catch(() => null)
         : Promise.resolve(null),
     ]);
-    return <SatelliteCard spatial={spatial} inactivity={inactivity} sar={sarEvents} className={className} />;
+    return <SatelliteCard spatial={spatial} inactivity={inactivity} sar={sarEvents} polygon={polygon} className={className} />;
   } catch (e) {
     return (
       <div className={`bg-rose-50 border border-rose-200 rounded-2xl p-5 text-sm text-rose-900 ${className}`}>

@@ -11,6 +11,7 @@
 //  7. Inactivity-баджик с метаданными
 
 import type {
+  FieldPolygon,
   SatelliteVerification,
   InactivityCheckResult,
   RiskFlag,
@@ -20,8 +21,10 @@ import type {
   NDVIFeatures,
 } from "@/lib/satellite/types";
 import type { SAREventsResult } from "@/lib/satellite/sar-events";
+import { polygonAreaHa, polygonBboxDims } from "@/lib/satellite/geo";
 import { Card, CardHeader, SourcePill } from "@/components/ui";
 import { SatelliteImageThumb } from "@/components/SatelliteImageThumb";
+import { SatelliteDatePicker } from "@/components/SatelliteDatePicker";
 
 const RISK_BG: Record<RiskFlag, string> = {
   LOW:    "bg-emerald-100 text-emerald-900 border-emerald-300",
@@ -55,18 +58,40 @@ interface Props {
   inactivity: InactivityCheckResult;
   // SAR-результат, если CDSE настроен и ряд получен. null/undefined = пропускаем.
   sar?: SAREventsResult | null;
+  // Полигон поля — нужен для интерактивного date-picker'а снимков.
+  // Опционален: если не передан, секция «снимки по дате» не рендерится.
+  polygon?: FieldPolygon;
   className?: string;
 }
 
-export function SatelliteCard({ spatial, inactivity, sar, className = "" }: Props) {
+export function SatelliteCard({ spatial, inactivity, sar, polygon, className = "" }: Props) {
   const f = spatial.features;
   const insufficient = spatial.status === "INSUFFICIENT_DATA";
+  // Геодезическая площадь и габариты полигона. Считаем здесь, чтобы не
+  // тащить через пропы.
+  const areaHa = polygon ? polygonAreaHa(polygon) : null;
+  const bbox = polygon ? polygonBboxDims(polygon) : null;
+  // Base64-url полигона для date-picker'а — берём с готового image.url,
+  // чтобы не дублировать сериализацию.
+  const polygonB64 = (() => {
+    if (!polygon) return null;
+    const firstImg = spatial.images?.[0];
+    if (firstImg) {
+      const m = /[?&]p=([^&]+)/.exec(firstImg.url);
+      if (m) return m[1];
+    }
+    return Buffer.from(JSON.stringify(polygon), "utf8").toString("base64url");
+  })();
 
   return (
     <Card className={className}>
       <CardHeader
         title="Спутниковая проверка поля"
-        subtitle={`Снимки Sentinel-2 за сезон ${spatial.window.startDate.slice(0, 4)} (с ${spatial.window.startDate} до ${spatial.window.endDate})`}
+        subtitle={
+          areaHa !== null && bbox
+            ? `Поле ${areaHa.toFixed(1)} га · ${Math.round(bbox.widthM)}×${Math.round(bbox.heightM)} м · Sentinel-2 за сезон ${spatial.window.startDate.slice(0, 4)} (${spatial.window.startDate} → ${spatial.window.endDate})`
+            : `Снимки Sentinel-2 за сезон ${spatial.window.startDate.slice(0, 4)} (с ${spatial.window.startDate} до ${spatial.window.endDate})`
+        }
         action={
           <div className="flex items-center gap-1.5">
             <span className={`inline-flex items-center text-[11px] font-bold tracking-wide px-2 py-0.5 rounded-md border ${RISK_BG[spatial.riskFlag]}`}>
@@ -104,6 +129,15 @@ export function SatelliteCard({ spatial, inactivity, sar, className = "" }: Prop
         <ul className="px-5 py-3 text-xs text-foreground/80 list-disc list-inside space-y-0.5 border-t border-border-soft">
           {spatial.reasons.map((r, i) => <li key={i}>{r}</li>)}
         </ul>
+      )}
+
+      {polygonB64 && (
+        <SatelliteDatePicker
+          polygonB64={polygonB64}
+          minDate={spatial.window.startDate}
+          maxDate={spatial.window.endDate}
+          defaultDate={f?.peakDate ?? spatial.window.endDate}
+        />
       )}
 
       {sar && <SARBlock sar={sar} />}

@@ -37,8 +37,10 @@ const SCENARIO_BY_FARMER: Record<string, MockScenario> = {
 };
 
 // Строит квадратный полигон ~halfDeg градусов вокруг точки.
-// halfDeg=0.015 ≈ 1.5–1.7 км (зависит от широты).
-function squareAround(lat: number, lng: number, halfDeg = 0.015): FieldPolygon {
+// halfDeg=0.004 ≈ 400×470 м (≈ 19 га) — размер обычного зернового поля
+// в северном Казахстане. Меньше = виден отдельный контур поля на спутнике;
+// раньше было 0.015 (3×3 км) — это уже не поле, а кусок района.
+function squareAround(lat: number, lng: number, halfDeg = 0.004): FieldPolygon {
   return [
     [lng - halfDeg, lat - halfDeg],
     [lng + halfDeg, lat - halfDeg],
