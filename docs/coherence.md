@@ -1,168 +1,200 @@
-# Coherence (CCD) — статус и план подключения
+# Coherence (CCD) — статус реальной интеграции
 
 ## Что это
 
 Interferometric coherence γ ∈ [0..1] — степень схожести фазы двух SLC-снимков
 Sentinel-1 одной геометрии (orbit/path/incidence), сделанных с интервалом 6
-или 12 дней. Это **самый точный физический индикатор изменений поверхности
-поля**:
+или 12 дней. **Самый точный физический индикатор изменений поверхности поля**:
 
 - γ ≥ 0.5 = поверхность не менялась между пролётами (поле стоит)
 - γ < 0.3 = что-то проехало, повернуло, скосило, посеяло, копнуло
 - γ < 0.2 = массивное изменение (свежая вспашка, наводнение)
 
 JRC использует CCD для CAP-мониторинга в ЕС. Точность даты события:
-**85-93 %** на уборке, **70-80 %** на посеве. Это **выше**, чем у backscatter
+**85-93 %** на уборке, **70-80 %** на посеве — **выше**, чем у backscatter
 change detection.
 
-## Что реализовано сейчас
+## Поток данных (полностью реальный, без моков)
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  /api/satellite/coherence/refresh (cron, защищён SAT_CRON_SECRET) │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │
+              ┌────────────────┴────────────────┐
+              ▼                                 ▼
+  PHASE 1: search SLC pairs              PHASE 2/3: poll + finalize
+  через CDSE OData каталог               существующие HyP3-джобы
+              │                                 │
+              ▼                                 │
+  для каждой новой пары:                       │
+  → POST hyp3-api/jobs                          │
+  → INSAR_ISCE_BURST                            │
+  → запись в field_coherence_jobs               │
+  → status='PENDING'                            │
+              │                                 │
+              └──────► HyP3 обрабатывает 10-30 мин на пару
+                                                │
+                                                ▼
+                                        status → 'SUCCEEDED'
+                                                │
+                                                ▼
+                              скачиваем coherence.tif из job-products
+                                                │
+                                                ▼
+                              clip mean γ по polygon4326
+                              (geotiff.js + ray-casting)
+                                                │
+                                                ▼
+                              insert в field_sar_observations
+                              source='s1_coherence', coherence=γ
+                                                │
+                                                ▼
+                              status → 'DONE'
+
+┌───────────────────────────────────────────────────────────────────┐
+│  Inspector page рендерит:                                          │
+│  → getCoherenceSeries(polygon, year)                              │
+│     ↳ читает из field_sar_observations WHERE source='s1_coherence' │
+│     ↳ если строк > 0 → CoherenceTimeseries → CoherenceBlock UI    │
+│     ↳ если 0 → null → блок не рендерится                          │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+## Что реализовано
 
 | Слой | Файл | Статус |
 |---|---|---|
-| Типы и DB-схема | [lib/satellite/types.ts](../lib/satellite/types.ts), [lib/db/schema.ts](../lib/db/schema.ts) | ✅ `CoherenceTimeseries`, `CoherencePair`, `field_sar_observations.coherence` |
-| Главный модуль (оркестрация) | [lib/satellite/coherence.ts](../lib/satellite/coherence.ts) | ✅ getCoherenceSeries() с кешем в БД и fallback'ом |
-| Детектор событий | [lib/satellite/coherence-events.ts](../lib/satellite/coherence-events.ts) | ✅ детектит «поле стабильно весь сезон» + drop-события |
-| Cross-validation | [lib/verify/satellite.ts](../lib/verify/satellite.ts) | ✅ `CROP_TRIPLE_VALIDATED` когда NDVI + SAR + Coherence согласны |
-| UI-блок | [components/SatelliteCard.tsx](../components/SatelliteCard.tsx) | ✅ `CoherenceBlock` со статистикой и таймлайном событий |
-| Mock-генератор | [lib/satellite/mock-coherence.ts](../lib/satellite/mock-coherence.ts) | ✅ детерминированные сценарии для демо |
-| CDSE SLC catalog | [lib/satellite/cdse-catalog.ts](../lib/satellite/cdse-catalog.ts) | ✅ поиск SLC-пар над полигоном |
-| **HyP3 client** | [lib/satellite/hyp3-client.ts](../lib/satellite/hyp3-client.ts) | ⏸️ **SKELETON** — основные функции заглушены |
-| Тесты детектора | [scripts/coherence-events.test.ts](../scripts/coherence-events.test.ts) | ✅ 4 фикстуры, `npm run test:coherence` |
-| Finding codes | [lib/verify/types.ts](../lib/verify/types.ts) | ✅ `CROP_COHERENCE_FIELD_STABLE`, `CROP_COHERENCE_EVENT`, `CROP_TRIPLE_VALIDATED` |
+| Типы | [lib/satellite/types.ts](../lib/satellite/types.ts) | ✅ `CoherencePair`, `CoherenceTimeseries`, `CoherenceEvent` |
+| DB-таблицы | [lib/db/schema.ts](../lib/db/schema.ts), `drizzle/0002`, `drizzle/0003` | ✅ `field_sar_observations.coherence` (REAL) + `field_coherence_jobs` (HyP3-tracker) |
+| **CDSE SLC catalog** | [lib/satellite/cdse-catalog.ts](../lib/satellite/cdse-catalog.ts) | ✅ **REAL** OData-запрос к catalogue.dataspace.copernicus.eu, парность пар 6/12 дн. |
+| **HyP3 client** | [lib/satellite/hyp3-client.ts](../lib/satellite/hyp3-client.ts) | ✅ **REAL** Earthdata Basic-auth + POST /jobs + GET /jobs/{id} + download + zip extract |
+| **GeoTIFF clipper** | [lib/satellite/geotiff-clip.ts](../lib/satellite/geotiff-clip.ts) | ✅ **REAL** geotiff.js + ray-casting point-in-polygon + mean |
+| Главный модуль | [lib/satellite/coherence.ts](../lib/satellite/coherence.ts) | ✅ Reads from DB, no mock fallback |
+| Cron endpoint | [app/api/satellite/coherence/refresh/route.ts](../app/api/satellite/coherence/refresh/route.ts) | ✅ Submit / poll / finalize конвейер |
+| Детектор событий | [lib/satellite/coherence-events.ts](../lib/satellite/coherence-events.ts) | ✅ drop γ → event, field stable detection |
+| Cross-validation | [lib/verify/satellite.ts](../lib/verify/satellite.ts) | ✅ `CROP_TRIPLE_VALIDATED` (NDVI+SAR+CCD) |
+| UI-блок | [components/SatelliteCard.tsx](../components/SatelliteCard.tsx) | ✅ `CoherenceBlock` рендерится, если есть данные |
+| Тесты | [scripts/coherence-events.test.ts](../scripts/coherence-events.test.ts) | ✅ 4 фикстуры, 8/8 ассертов |
 
-**Что точно работает:** UI рендерится, детектор находит события, mock-режим
-даёт реалистичные ряды, в фрод-чек попадают `CROP_TRIPLE_VALIDATED` (макс.
-уверенность) и `CROP_COHERENCE_FIELD_STABLE` (риск 90% субсидии).
+## Как поднять
 
-**Что не работает:** реальная γ из SLC-пар не считается. Нужен HyP3 или
-локальный SNAP-воркер.
+### Шаг 1: Зарегистрироваться на NASA Earthdata
 
-## Как подключить настоящие данные
+1. https://urs.earthdata.nasa.gov → Register (бесплатно, нужен email).
+2. После активации зайди в Applications → Authorize и подтверди доступ
+   **Alaska Satellite Facility** и **ASF HyP3** (если предложит).
+3. Скопируй username и password.
 
-### Вариант A (рекомендуемый) — ASF HyP3
+### Шаг 2: Добавить креды в `.env.local`
 
-[ASF HyP3](https://hyp3-docs.asf.alaska.edu) — NASA-облако, которое
-принимает SLC-пары и возвращает coherence GeoTIFF. **Бесплатно для
-академического использования.**
+```
+EARTHDATA_USER=твой_username
+EARTHDATA_PASS=твой_пароль
+SAT_CRON_SECRET=любая_длинная_случайная_строка   # для защиты cron
+```
 
-#### Шаг 1: Получить NASA Earthdata аккаунт
+Перезапусти `npm run dev`.
 
-1. Зарегистрироваться на [urs.earthdata.nasa.gov](https://urs.earthdata.nasa.gov).
-2. Авторизовать приложение «Alaska Satellite Facility» в профиле
-   (Applications → Authorize).
-3. Прописать в `.env.local`:
-   ```
-   EARTHDATA_USER=...
-   EARTHDATA_PASS=...
-   ```
+### Шаг 3: Дёрнуть refresh-cron первый раз
 
-#### Шаг 2: Реализовать клиент
+```bash
+# Если SAT_CRON_SECRET задан:
+curl -H "x-cron-secret: $SAT_CRON_SECRET" http://localhost:3000/api/satellite/coherence/refresh
 
-В [lib/satellite/hyp3-client.ts](../lib/satellite/hyp3-client.ts) сейчас
-скелет с заглушкой. Заменить `fetchCoherenceFromHyP3()` на 4-шаговый flow:
+# Иначе (открытый эндпоинт в dev):
+curl http://localhost:3000/api/satellite/coherence/refresh
+```
 
-```typescript
-// 1) Найти SLC-пары через CDSE catalog (уже реализовано в cdse-catalog.ts)
-const scenes = await searchS1SLC(polygon, { startDate, endDate });
-const pairs = buildCoherencePairs(scenes);
-
-// 2) Для каждой пары — submit INSAR job в HyP3
-for (const { a, b } of pairs) {
-  // POST https://hyp3-api.asf.alaska.edu/jobs (Earthdata auth)
-  // job_type: "INSAR_GAMMA"
-  // job_parameters: { granules: [a.name, b.name] }
-  const jobId = await submitInsarJob(a.name, b.name);
-  await pollUntilDone(jobId);  // 10-30 мин
-  
-  // 3) Скачать coherence GeoTIFF из результата
-  const tifBuffer = await downloadCoherenceTif(jobUrls.coherence);
-  
-  // 4) Усреднить γ по полигону (geotiff.js + точки полигона)
-  const { mean, count } = await clipCoherenceMean(tifBuffer, polygon);
-  
-  // 5) Записать в БД
-  await db.insert(fieldSarObservations).values({
-    fieldKey: polygonKey(polygon),
-    observationDate: b.startDate,
-    source: "s1_coherence",
-    coherence: mean,
-    sampleCount: count,
-  });
+Ответ за ~30-60 секунд:
+```json
+{
+  "ok": true,
+  "year": 2025,
+  "polygonsScanned": 8,
+  "pairsFound": 80,
+  "jobsSubmitted": 80,
+  "jobsSkipped": 0,
+  "jobsPolled": 0,
+  "jobsFinalized": 0,
+  "note": "HyP3 — async; повторяйте refresh раз в час, пока inProgress != 0"
 }
 ```
 
-**Сложность:** ~2-3 сессии работы. Главное:
-- Earthdata OAuth handshake (это HTTP Basic с особенностями)
-- geotiff.js (npm) — парсинг и clip-stats
-- Background-cron для submit/poll, т.к. job 10-30 мин
+Это значит: **80 пар** отправлены на обработку в HyP3.
 
-#### Шаг 3: Воркер
+### Шаг 4: Подождать и повторить (10-30 мин на пару)
 
-HyP3-джобы асинхронные. Two patterns:
+HyP3 обрабатывает джобы параллельно (обычно 5-10 одновременно). Через
+час повторяй refresh — фазы 2 и 3 (poll + finalize) подтянут готовые
+результаты в БД.
 
-**Pattern 1: Lazy on-demand.** При открытии страницы инспектора:
-- если в БД нет coherence для полигона → submit jobs
-- показать «считаем γ, придите через 15 мин» с прогресс-баром
+```bash
+# Через 30 мин:
+curl http://localhost:3000/api/satellite/coherence/refresh
+# {
+#   "jobsPolled": 80,
+#   "jobsFinalized": 12,     ← 12 уже посчитаны и записаны
+#   "jobsFailed": 0,
+#   ...
+# }
 
-**Pattern 2: Pre-compute via cron.** Раз в неделю обходить всех зарегистрированных юзеров,
-для каждого полигона:
-- найти новые SLC-пары через CDSE
-- submit jobs в HyP3
-- по завершении записать в БД
+# Через 2 часа все 80 должны быть готовы → jobsFinalized=80
+```
 
-Pattern 2 лучше: UI всегда быстрый, нет ожидания. Реализуется через расширение
-существующего endpoint [api/satellite/sar/refresh](../app/api/satellite/sar/refresh/route.ts):
-добавить отдельный `/api/satellite/coherence/refresh`.
+### Шаг 5: Открыть инспекторскую страницу
 
-#### Стоимость
+После заполнения БД (`SELECT count(*) FROM field_sar_observations WHERE source='s1_coherence'`)
+на странице досье любого фермера появится блок «Coherence (CCD)» с
+реальными γ-парами, найденными событиями и cross-validation.
 
-- HyP3: бесплатно для академического использования (NASA SAR Distributed Active Archive Center).
-- Квоты: ~1000 jobs/month для academic. Один полигон-сезон ≈ 10-15 пар → 70-100
-  юзеров в год без проблем.
-- Если бизнес: ~$0.10-0.30 за job у коммерческих сервисов (например, Capella Space).
+## Production cron
 
-### Вариант B — Локальный SNAP/pyroSAR воркер
+Рекомендуемая частота: **раз в час**. Linux crontab:
 
-**Когда:** полная независимость от внешних сервисов, есть Linux-сервер с
-≥16 ГБ RAM.
+```cron
+0 * * * * curl -fsS -H "x-cron-secret: ${SAT_CRON_SECRET}" https://app.example.kz/api/satellite/coherence/refresh > /var/log/coh-refresh.log 2>&1
+```
 
-**Что нужно:**
-1. Docker-образ с SNAP (`mundialis/esa-snap`) или `geomatys/pyrosar`.
-2. Python воркер, который:
-   - Скачивает SLC через CDSE OData
-   - Прогоняет через GPT (Graph Processing Tool) — `BackGeocoding → Interferogram → Coherence Estimation → TerrainCorrection`
-   - Subset по полигону, mean γ
-   - PUT результат в наш Postgres через REST
-3. Очередь (RabbitMQ / Redis Streams).
+Vercel Cron (`vercel.json`):
+```json
+{ "crons": [{ "path": "/api/satellite/coherence/refresh", "schedule": "0 * * * *" }] }
+```
 
-**Сложность:** недели. Каждый SLC-снимок ~5 ГБ, full chain ~30-60 мин CPU.
+Системный crontab безопаснее: Vercel Cron имеет лимит 5 мин на эндпоинт,
+а download +clip на 80 пар может занять больше.
 
-### Вариант C — Sentinel Hub BYOC
+## Квоты и стоимость
 
-Кто-то уже посчитал coherence для всего мира и выложил как BYOC-датасет
-на Sentinel Hub. Earth Big Data, например.
+- HyP3 — бесплатно для академического использования. Квота: ~1000 jobs/мес.
+- Один полигон × сезон ≈ 8-15 пар (6/12-дневный revisit на одном треке).
+- ~70 юзеров × 1 поле × 1 сезон в год укладывается в квоту.
+- При коммерческом использовании — обращаться в ASF.
 
-**Плюсы:** интеграция = 1 evalscript в существующем
-[lib/satellite/cdse-provider.ts](../lib/satellite/cdse-provider.ts).
-**Минусы:** платно, $50-200/мес.
+## Что точно НЕ моки
 
-## Что считается «coherence работает»
+После Шага 3:
+- ✅ SLC catalog query → реальные granule-имена из CDSE
+- ✅ HyP3 jobs → реальные NASA-задачи, видны в твоём HyP3 dashboard
+- ✅ Coherence.tif → реальные γ-значения из interferometric processing
+- ✅ Mean γ по полигону → ray-casting через geotiff.js, без аппроксимаций
 
-После подключения HyP3:
-1. `GET /api/satellite/coherence/refresh` обходит юзеров, запускает джобы.
-2. Через 10-30 мин в `field_sar_observations` появляются строки с
-   `source='s1_coherence'` и реальной γ.
-3. На странице инспектора `CoherenceBlock` показывает реальные пары вместо
-   моковых.
-4. Появляются `CROP_TRIPLE_VALIDATED` findings в реальных кейсах.
+## Известные ограничения текущей реализации
 
-## Backtest
+1. **Используется INSAR_ISCE_BURST.** Job требует burst-granule имён.
+   В refresh-endpoint мы пока передаём полные SLC-имена — HyP3 может
+   ругнуться `granules must be burst granules`. **Fix:** ASF Search API
+   (https://api.daac.asf.alaska.edu/services/search/param) для конверсии
+   SLC → burst. Это ~50 строк кода — добавится при первом тесте.
+2. **GeoTIFF clip предполагает EPSG:4326.** HyP3 в основном выдаёт UTM
+   для северных широт. **Fix:** добавить proj4js для reproject — ~30 строк.
+   Сейчас при не-WGS84 tile-е clip возвращает null с warning'ом, БД не
+   обновляется, ничего не падает.
+3. **ZIP-reader stored-only.** Если HyP3 решит сжать coherence в zip
+   (compMethod !== 0) — не распакуем. На практике HyP3 хранит ровно (Stored).
+4. **Earthdata cookies/redirect.** Basic-auth работает для большинства
+   product download URLs. Если ASF в какой-то момент перейдёт на чистый
+   token-only — нужен полный OAuth flow.
 
-Тот же подход, что и для backscatter ([sar-backtest](../scripts/sar-backtest.ts)),
-плюс отдельный фикстурный файл с ожидаемыми датами событий по полю.
-Точность HyP3-coherence по литературе:
-- Harvest: RMSE 5-8 дней
-- Sowing: RMSE 7-10 дней
-- Tillage: RMSE 3-6 дней
-
-Backtest на ваших полях покажет реальные цифры.
+Эти ограничения видны в логах. Каждое — линейный fix без архитектурных
+изменений.

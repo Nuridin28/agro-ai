@@ -11,9 +11,7 @@ import { db } from "../db";
 import { fieldSarObservations } from "../db/schema";
 import type { FieldPolygon, CoherenceTimeseries, CoherencePair } from "./types";
 import { fetchCoherenceFromHyP3, isHyP3Configured } from "./hyp3-client";
-import { mockCoherenceSeries } from "./mock-coherence";
-import { lookupScenario, type MockScenario } from "./mock-provider";
-import { polygonKey, polygonCentroid } from "./sar";
+import { polygonKey } from "./sar";
 
 const CACHE_TTL_CURRENT_MS = 7 * 24 * 60 * 60 * 1000;
 function ttlForRange(startDate: string): number {
@@ -81,13 +79,8 @@ async function writeToDb(fieldKey: string, series: CoherenceTimeseries): Promise
     });
 }
 
-function lookupMockScenario(polygon: FieldPolygon): MockScenario {
-  const [lng, lat] = polygonCentroid(polygon);
-  return lookupScenario([lat, lng]) ?? "medium";
-}
-
-// Главный API. Возвращает null если ни один источник недоступен — наверху
-// этот null приведёт к graceful skip coherence-блока.
+// Главный API. Возвращает null если HyP3 не настроен ИЛИ ещё не наполнил БД.
+// Никаких моков — coherence или есть реальная, или её нет, и блок не рендерится.
 export async function getCoherenceSeries(
   polygon: FieldPolygon,
   startDate: string,
@@ -96,7 +89,7 @@ export async function getCoherenceSeries(
 ): Promise<CoherenceTimeseries | null> {
   const fieldKey = polygonKey(polygon);
 
-  // 1) Read from cache
+  // 1) Read from cache — основной путь, т.к. реальный расчёт делает cron
   if (!opts.forceRefresh) {
     const cache = await readFromDb(fieldKey, startDate, endDate);
     const ttl = ttlForRange(startDate);
@@ -112,7 +105,9 @@ export async function getCoherenceSeries(
     }
   }
 
-  // 2) Try HyP3 (real)
+  // 2) Inline HyP3-вызов оставлен как заглушка (см. hyp3-client.fetchCoherenceFromHyP3) —
+  // реальная обработка HyP3 асинхронна (10-30 мин на пару), и инлайн она
+  // не выполняется. Cron /api/satellite/coherence/refresh наполняет БД.
   const fromHyP3 = await fetchCoherenceFromHyP3(polygon, startDate, endDate);
   if (fromHyP3 && fromHyP3.pairs.length > 0) {
     await writeToDb(fieldKey, fromHyP3).catch((e) =>
@@ -121,18 +116,11 @@ export async function getCoherenceSeries(
     return fromHyP3;
   }
 
-  // 3) Mock fallback
-  if (process.env.SAT_PROVIDER === "mock") {
-    const scenario = lookupMockScenario(polygon);
-    return mockCoherenceSeries(polygon, startDate, endDate, scenario);
-  }
-
   return null;
 }
 
-// Доступность coherence-канала для UI (true если HyP3 настроен ИЛИ мок).
+// Доступность coherence-канала для UI (true только при настроенном HyP3 и
+// заполненной БД — иначе блок не рендерится).
 export function isCoherenceConfigured(): boolean {
-  if (isHyP3Configured()) return true;
-  if (process.env.SAT_PROVIDER === "mock") return true;
-  return false;
+  return isHyP3Configured();
 }

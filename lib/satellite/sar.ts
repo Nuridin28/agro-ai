@@ -17,8 +17,6 @@ import { db } from "../db";
 import { fieldSarObservations } from "../db/schema";
 import type { FieldPolygon, SARTimeseries, SARPoint } from "./types";
 import { fetchS1SeriesFromCDSE } from "./cdse-provider";
-import { mockS1Series } from "./mock-sar";
-import { lookupScenario, type MockScenario } from "./mock-provider";
 
 // Стабильный ключ полигона: округляем координаты до 5 знаков (~1 м точности
 // для широт KZ) и хешируем. Если фермер перерегистрируется и присылает тот
@@ -123,17 +121,9 @@ export async function getS1Series(
     }
   }
 
-  // 2) Запрос к CDSE. Если кредов нет → null.
-  let fresh = await fetchS1SeriesFromCDSE(polygon, startDate, endDate);
-
-  // 3) Mock-фолбэк: если CDSE-кредов нет (или ответ пустой), но провайдер
-  // спутника = mock — генерируем детерминированный SAR-ряд по сценарию поля.
-  // Так демо без CDSE не теряет SAR-блок.
-  if ((!fresh || fresh.points.length === 0) && process.env.SAT_PROVIDER === "mock") {
-    const scenario = lookupMockScenario(polygon);
-    const mocked = mockS1Series(polygon, startDate, endDate, scenario);
-    return mocked;
-  }
+  // 2) Запрос к CDSE. Если кредов нет ИЛИ CDSE вернул пусто — null.
+  // Никаких mock-фолбэков: либо реальный SAR из CDSE, либо ничего.
+  const fresh = await fetchS1SeriesFromCDSE(polygon, startDate, endDate);
   if (!fresh) return null;
 
   // 3) Пишем в БД для следующих запросов и возвращаем как есть.
@@ -143,18 +133,10 @@ export async function getS1Series(
   return fresh;
 }
 
-// Проверка «доступен ли вообще SAR-канал» для UI и обвязки. True если
-// настроен CDSE ИЛИ если мок-провайдер активирован (демо без интернет-доступа).
+// Проверка «доступен ли вообще SAR-канал» для UI и обвязки. True только если
+// настроен CDSE — никаких mock-фолбэков.
 export function isSARConfigured(): boolean {
-  if (process.env.CDSE_CLIENT_ID && process.env.CDSE_CLIENT_SECRET) return true;
-  if (process.env.SAT_PROVIDER === "mock") return true;
-  return false;
-}
-
-// Реестр сценариев такой же, как у NDVI-мока (по центроиду полигона).
-function lookupMockScenario(polygon: FieldPolygon): MockScenario {
-  const [lng, lat] = polygonCentroid(polygon);
-  return lookupScenario([lat, lng]) ?? "medium";
+  return !!(process.env.CDSE_CLIENT_ID && process.env.CDSE_CLIENT_SECRET);
 }
 
 // Центр полигона по простому среднему координат — для запроса осадков в одной

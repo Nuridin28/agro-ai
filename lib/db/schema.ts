@@ -56,9 +56,45 @@ export const fieldSarObservations = pgTable(
   }),
 );
 
+// Трекер HyP3-джобов для расчёта coherence из SLC-пар. HyP3 — асинхронный
+// сервис (10-30 мин на обработку), поэтому submit и сбор результата — две
+// разные операции, между которыми job-id должен где-то жить.
+//
+// Поток:
+//   1. /api/satellite/coherence/refresh находит SLC-пары через CDSE и для
+//      каждой делает submit в HyP3 → запись со status='running'
+//   2. Тот же endpoint при следующем вызове опрашивает status каждой записи,
+//      и для PENDING/RUNNING — повторно запрашивает HyP3
+//   3. Когда HyP3 возвращает SUCCEEDED — скачиваем coherence.tif, считаем
+//      mean γ по полигону, пишем в field_sar_observations, status='done'
+export const fieldCoherenceJobs = pgTable(
+  "field_coherence_jobs",
+  {
+    id: text("id").primaryKey(),                       // HyP3 job UUID
+    fieldKey: text("field_key").notNull(),
+    pairStartDate: date("pair_start_date").notNull(),  // дата primary SLC (a)
+    pairEndDate: date("pair_end_date").notNull(),      // дата secondary SLC (b)
+    granuleRef: text("granule_ref").notNull(),         // имя SLC granule (primary)
+    granuleSec: text("granule_sec").notNull(),         // имя SLC granule (secondary)
+    status: text("status").notNull(),                  // 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'DONE'
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    // URL до coherence.tif на HyP3 (доступен после SUCCEEDED). Сохраняем
+    // чтобы можно было перекачать при пересборке кеша без re-submit.
+    coherenceProductUrl: text("coherence_product_url"),
+    errorMessage: text("error_message"),
+  },
+  (t) => ({
+    fieldIdx: index("coh_jobs_field_idx").on(t.fieldKey, t.pairEndDate),
+    statusIdx: index("coh_jobs_status_idx").on(t.status),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
 export type ApplicationRow = typeof applications.$inferSelect;
 export type ApplicationInsert = typeof applications.$inferInsert;
 export type FieldSarObservationRow = typeof fieldSarObservations.$inferSelect;
 export type FieldSarObservationInsert = typeof fieldSarObservations.$inferInsert;
+export type FieldCoherenceJobRow = typeof fieldCoherenceJobs.$inferSelect;
+export type FieldCoherenceJobInsert = typeof fieldCoherenceJobs.$inferInsert;

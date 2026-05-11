@@ -22,6 +22,13 @@
       "when": 1778492783632,
       "tag": "0002_field_observations_coherence",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778493218521,
+      "tag": "0003_field_coherence_jobs",
+      "breakpoints": true
     }
   ]
 }
